@@ -61,9 +61,9 @@ app = create_app(
 )
 
 _TASK_GRADER_SPECS: dict[str, str] = {
-    "easy": "graders:easy_grader",
-    "medium": "graders:medium_grader",
-    "hard": "graders:hard_grader",
+    "easy": "server.graders.grade_easy",
+    "medium": "server.graders.grade_medium",
+    "hard": "server.graders.grade_hard",
 }
 
 
@@ -87,8 +87,8 @@ def _task_summary() -> list[dict[str, object]]:
                 "block_count": len(config["nodes"]),
                 "max_steps": len(config["nodes"]),
                 "score_range": [0.0, 1.0],
-                "grader": _TASK_GRADER_SPECS.get(task_name, ""),
-                "grader_available": task_name in GRADERS,
+                "grader": task_name in GRADERS,
+                "grader_ref": _TASK_GRADER_SPECS.get(task_name, ""),
             }
         )
     return tasks
