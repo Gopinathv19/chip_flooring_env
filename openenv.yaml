@@ -28,7 +28,7 @@ tasks:
     block_count: 5
     max_steps: 5
     score_range: [0.0, 1.0]
-    grader: chip_flooring_env.server.graders.easy_grader
+    grader: graders:easy_grader
 
   - id: medium
     difficulty: medium
@@ -37,7 +37,7 @@ tasks:
     block_count: 10
     max_steps: 10
     score_range: [0.0, 1.0]
-    grader: chip_flooring_env.server.graders.medium_grader
+    grader: graders:medium_grader
 
   - id: hard
     difficulty: hard
@@ -46,7 +46,7 @@ tasks:
     block_count: 15
     max_steps: 15
     score_range: [0.0, 1.0]
-    grader: chip_flooring_env.server.graders.hard_grader
+    grader: graders:hard_grader
 
 observation:
   type: object
