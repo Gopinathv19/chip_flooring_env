@@ -17,7 +17,6 @@ class ChipFlooringEnvironment(Environment):
  
     def __init__(self):
         """Initialize the chip_flooring_env environment."""
-        self._state = State(episode_id=str(uuid4()), step_count=0)
         self.task_name = os.getenv("TASK_NAME", "hard").strip().lower() or "hard"
         self.grid_size = 24
         self.hpwl_weight = 0.25
@@ -34,6 +33,21 @@ class ChipFlooringEnvironment(Environment):
         self.task_configs = self._build_task_configs()
         self.global_netlist = self._select_task_netlist(self.task_name)
         self.grid_size = self._select_task_grid_size(self.task_name)
+        self._state = ChipFlooringResponseState(
+            episode_id=str(uuid4()),
+            step_count=0,
+            grid_size=self.grid_size,
+            grid=[[0 for _ in range(self.grid_size)] for _ in range(self.grid_size)],
+            blocks=[],
+            placed_blocks=[],
+            remaining_blocks=[],
+            done=False,
+            reward=0.0,
+            current_hpwl=0.0,
+            delta_hpwl=0.0,
+            task_name=self.task_name,
+            trajectory=[],
+        )
  
 
 
@@ -70,6 +84,8 @@ class ChipFlooringEnvironment(Environment):
 
          
     def step(self, action: ChipFlooringAction) -> ChipFlooringObservation:  # type: ignore[override]
+        if self.canvas is None:
+            self.reset()
  
         self._state.step_count += 1
         self._state.reward=0.0
