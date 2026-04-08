@@ -1,0 +1,104 @@
+spec_version: 1
+name: chip_flooring_env
+version: 1.0.0
+description: Industrial chip floorplanning environment for training placement agents on legality, connectivity, and wirelength minimization.
+author: gopi-nts0117
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+
+environment:
+  mode: http
+  base_url: https://chip_flooring_env.hf.space
+  endpoints:
+    reset: POST /reset
+    step: POST /step
+    state: GET /state
+    schema: GET /schema
+    tasks: GET /tasks
+    grader: POST /grader
+    health: GET /health
+
+tasks:
+  - id: easy
+    difficulty: easy
+    description: Place 5 connected blocks legally on a 12x12 grid while keeping connected blocks close.
+    grid_size: 12
+    block_count: 5
+    max_steps: 5
+    score_range: [0.0, 1.0]
+    grader:
+      type: deterministic
+      source: environment_reward
+      normalization: completion_plus_hpwl
+      objective: legality_and_local_connectivity
+
+  - id: medium
+    difficulty: medium
+    description: Place 10 connected blocks legally on an 18x18 grid while reducing congestion and HPWL.
+    grid_size: 18
+    block_count: 10
+    max_steps: 10
+    score_range: [0.0, 1.0]
+    grader:
+      type: deterministic
+      source: environment_reward
+      normalization: completion_plus_hpwl
+      objective: legality_connectivity_and_density
+
+  - id: hard
+    difficulty: hard
+    description: Place 15 connected blocks legally on a 24x24 grid while minimizing wirelength under tighter clustering pressure.
+    grid_size: 24
+    block_count: 15
+    max_steps: 15
+    score_range: [0.0, 1.0]
+    grader:
+      type: deterministic
+      source: environment_reward
+      normalization: completion_plus_hpwl
+      objective: legality_connectivity_and_wirelength
+
+observation:
+  type: object
+  fields:
+    task_name: string
+    canva_space: list
+    remaining_blocks: list
+    placed_blocks: list
+    block_summaries: list
+    candidate_positions: list
+    density_map: list
+    placement_focus: object
+    current_hpwl: number
+    delta_hpwl: number
+    placed_block_count: integer
+    invalid_reasons: string
+    done: boolean
+    reward: number
+
+action:
+  type: object
+  fields:
+    x:
+      type: integer
+      description: Row anchor for the selected block.
+    y:
+      type: integer
+      description: Column anchor for the selected block.
+    choosen_block_index:
+      type: integer
+      description: Index of the block chosen from the remaining block list.
+
+reward:
+  range: [-1.0, 1.0]
+  shaped: true
+  description: Dense reward combines legality, partial HPWL improvement, and completion bonus. Invalid actions are penalized.
+
+tags:
+  - openenv
+  - chip-flooring
+  - placement
+  - physical-design
+  - reinforcement-learning
