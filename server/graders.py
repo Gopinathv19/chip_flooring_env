@@ -26,7 +26,8 @@ def _as_float(value: Any, default: float = 0.0) -> float:
 
 
 def _normalize_score(score: float) -> float:
-    return max(0.0, min(1.0, score))
+    # Validator requires scores strictly inside (0, 1), not endpoints.
+    return round(max(0.01, min(0.99, score)), 2)
 
 
 def _compute_score(payload: Dict[str, Any], difficulty: str) -> float:

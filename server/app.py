@@ -67,6 +67,10 @@ _TASK_GRADER_SPECS: dict[str, str] = {
 }
 
 
+def _normalize_score(score: float) -> float:
+    return round(max(0.01, min(0.99, score)), 2)
+
+
 def _task_summary() -> list[dict[str, object]]:
     env = ChipFlooringEnvironment()
     tasks: list[dict[str, object]] = []
@@ -116,7 +120,7 @@ def grader(payload: dict | None = Body(default=None)):
         score = 0.0
     return {
         "task_name": task_name,
-        "score": max(0.0, min(1.0, score)),
+        "score": _normalize_score(score),
         "grader_type": "deterministic",
     }
 
