@@ -1,2 +1,12 @@
-# chip_flooring_env
-OpenEnv chip flooring environment for agent placement tasks, task-specific legality checks, and wirelength optimization on easy, medium, and hard layouts.
+---
+title: Chip Flooring Env
+emoji: 🤖
+sdk: docker
+app_port: 8000
+short_description: OpenEnv chip floorplanning benchmark
+tags:
+  - openenv
+  - chip-flooring
+  - placement
+  - rl
+---
