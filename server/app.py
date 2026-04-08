@@ -60,6 +60,12 @@ app = create_app(
     gradio_builder=build_clean_gradio_ui,
 )
 
+_TASK_GRADER_SPECS: dict[str, str] = {
+    "easy": "graders:easy_grader",
+    "medium": "graders:medium_grader",
+    "hard": "graders:hard_grader",
+}
+
 
 def _task_summary() -> list[dict[str, object]]:
     env = ChipFlooringEnvironment()
@@ -77,7 +83,8 @@ def _task_summary() -> list[dict[str, object]]:
                 "block_count": len(config["nodes"]),
                 "max_steps": len(config["nodes"]),
                 "score_range": [0.0, 1.0],
-                "grader": task_name in GRADERS,
+                "grader": _TASK_GRADER_SPECS.get(task_name, ""),
+                "grader_available": task_name in GRADERS,
             }
         )
     return tasks
@@ -96,15 +103,20 @@ def grader(payload: dict | None = Body(default=None)):
         or payload.get("task_id")
         or os.getenv("TASK_NAME", "hard")
     ).strip().lower() or "hard"
+    grader_fn = GRADERS.get(task_name)
+    if grader_fn is not None:
+        result = dict(grader_fn(payload))
+        result["task_name"] = task_name
+        return result
+
     raw_score = payload.get("score", payload.get("reward", 0.0))
     try:
         score = float(raw_score)
     except (TypeError, ValueError):
         score = 0.0
-    score = max(0.0, min(1.0, score))
     return {
         "task_name": task_name,
-        "score": score,
+        "score": max(0.0, min(1.0, score)),
         "grader_type": "deterministic",
     }
 

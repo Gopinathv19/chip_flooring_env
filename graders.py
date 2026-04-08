@@ -7,20 +7,23 @@ repository checkout, without depending on setuptools package installation.
 
 from __future__ import annotations
 
-import os
-import sys
+from importlib import util as importlib_util
+from pathlib import Path
 
-_SERVER_PATH = os.path.join(os.path.dirname(__file__), "server")
-if _SERVER_PATH not in sys.path:
-    sys.path.insert(0, _SERVER_PATH)
 
-try:
-    from chip_flooring_env.server.graders import (
-        easy_grader,
-        hard_grader,
-        medium_grader,
-    )
-except ImportError:
-    from server.graders import easy_grader, hard_grader, medium_grader
+_SERVER_GRADERS_PATH = Path(__file__).resolve().parent / "server" / "graders.py"
+_SPEC = importlib_util.spec_from_file_location(
+    "_chip_flooring_env_server_graders", _SERVER_GRADERS_PATH
+)
+if _SPEC is None or _SPEC.loader is None:  # pragma: no cover - defensive guard
+    raise ImportError(f"Cannot load graders from {_SERVER_GRADERS_PATH}")
 
-__all__ = ["easy_grader", "medium_grader", "hard_grader"]
+_MODULE = importlib_util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+
+GRADERS = _MODULE.GRADERS
+easy_grader = _MODULE.easy_grader
+medium_grader = _MODULE.medium_grader
+hard_grader = _MODULE.hard_grader
+
+__all__ = ["GRADERS", "easy_grader", "medium_grader", "hard_grader"]
