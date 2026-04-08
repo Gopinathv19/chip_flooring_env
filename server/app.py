@@ -38,11 +38,11 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 try:
-    from ..models import ChipFlooringAction, ChipFlooringObservation
-    from .chip_flooring_env_environment import ChipFlooringEnvironment
-except ModuleNotFoundError:
     from models import ChipFlooringAction, ChipFlooringObservation
     from server.chip_flooring_env_environment import ChipFlooringEnvironment
+except ImportError:
+    from ..models import ChipFlooringAction, ChipFlooringObservation
+    from .chip_flooring_env_environment import ChipFlooringEnvironment
 from fastapi import Body
 
 
