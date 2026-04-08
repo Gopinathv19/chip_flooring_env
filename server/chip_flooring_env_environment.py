@@ -95,8 +95,7 @@ class ChipFlooringEnvironment(Environment):
                 self._state.reward = self.invalid_bounds_penalty
 
             else:
-                block_num = self.block_id_map[block.id]
-                self.canvas.occupy_region((x,y),block.y,block.x,block_num)
+                self.canvas.occupy_region((x,y),block.y,block.x,block.id)
                 block.placed=True
                 block.position=(x,y)
                 self._state.placed_blocks.append(block)
@@ -259,29 +258,26 @@ class ChipFlooringEnvironment(Environment):
         )
 
     def _block_summary(self, block: "Block") -> dict:
-        neighbors = []
-        placed_neighbors = []
-        unplaced_neighbors = []
-        strongest_neighbors = []
+        top_connections = []
+        placed_neighbor_count = 0
+        placed_neighbor_weight = 0.0
 
         for neighbor_id, weight in sorted(
             block.get_internal_netlist().items(),
             key=lambda item: (-item[1], item[0]),
         ):
             neighbor = self._block_lookup.get(neighbor_id)
-            neighbor_summary = {
-                "id": neighbor_id,
-                "weight": weight,
-                "placed": bool(neighbor.placed) if neighbor is not None else False,
-                "position": neighbor.position if neighbor is not None else None,
-            }
-            neighbors.append(neighbor_summary)
             if neighbor is not None and neighbor.placed:
-                placed_neighbors.append(neighbor_summary)
-            else:
-                unplaced_neighbors.append(neighbor_summary)
-            if len(strongest_neighbors) < 3:
-                strongest_neighbors.append(neighbor_summary)
+                placed_neighbor_count += 1
+                placed_neighbor_weight += weight
+            if len(top_connections) < 3:
+                top_connections.append(
+                    {
+                        "id": neighbor_id,
+                        "weight": weight,
+                        "placed": bool(neighbor.placed) if neighbor is not None else False,
+                    }
+                )
 
         return {
             "id": block.id,
@@ -290,12 +286,9 @@ class ChipFlooringEnvironment(Environment):
             "area": block.x * block.y,
             "degree": len(block.get_internal_netlist()),
             "priority_score": self._block_priority_score(block),
-            "connected_blocks": [neighbor["id"] for neighbor in neighbors],
-            "strongest_neighbors": strongest_neighbors,
-            "placed_neighbors": placed_neighbors,
-            "unplaced_neighbors": unplaced_neighbors,
-            "placed_neighbor_count": len(placed_neighbors),
-            "placed_neighbor_weight": sum(n["weight"] for n in placed_neighbors),
+            "top_connections": top_connections,
+            "placed_neighbor_count": placed_neighbor_count,
+            "placed_neighbor_weight": round(placed_neighbor_weight, 4),
             "placed": block.placed,
             "position": block.position,
         }
@@ -310,7 +303,7 @@ class ChipFlooringEnvironment(Environment):
 
         for row in range(self.grid_size):
             for col in range(self.grid_size):
-                if self.canvas.grid[row][col] == 0:
+                if self.canvas.grid[row][col] is None:
                     continue
                 r = min(cells - 1, row // cell_h)
                 c = min(cells - 1, col // cell_w)
@@ -354,7 +347,7 @@ class ChipFlooringEnvironment(Environment):
     def _generate_candidate_positions(
         self,
         top_blocks: int = 4,
-        per_block_limit: int = 3,
+        per_block_limit: int = 2,
     ) -> list[dict]:
         if self.canvas is None:
             return []
@@ -395,7 +388,8 @@ class ChipFlooringEnvironment(Environment):
         }
     
     def _build_observation(self,invalid_reason: Optional[str]=None)->ChipFlooringObservation:
-        remaining_block_summaries = [self._block_summary(b) for b in self._state.remaining_blocks]
+        ranked_remaining_blocks = self._rank_remaining_blocks()
+        remaining_block_summaries = [self._block_summary(b) for b in ranked_remaining_blocks[:5]]
         focus_block = remaining_block_summaries[0] if remaining_block_summaries else None
         return ChipFlooringObservation(
             canva_space=self.canvas.grid,
@@ -524,14 +518,14 @@ class Canvas:
     '''
     def __init__(self,grid_size):
         self.grid_size = grid_size
-        self.grid = [[0 for _ in range(grid_size)] for _ in range(grid_size)]
+        self.grid = [[None for _ in range(grid_size)] for _ in range(grid_size)]
 
     '''
         Function for knowing whether the particular unit is available or not
     '''
 
     def is_unit_occupied(self,x,y):
-        return self.grid[x][y] != 0
+        return self.grid[x][y] is not None
     
     '''
         Function to identify whether the component can be placed in the grid
@@ -547,7 +541,7 @@ class Canvas:
         # overlap check
         for dx in range(height):
             for dy in range(width):
-                if self.grid[row + dx][col + dy] != 0:
+                if self.grid[row + dx][col + dy] is not None:
                     return False
 
         return True
@@ -569,7 +563,7 @@ class Canvas:
         row, col = anchor
         for dx in range(height):
             for dy in range(width):
-                self.grid[row + dx][col + dy] = 0
+                self.grid[row + dx][col + dy] = None
 
 class Block:
     def __init__(self,id,height,width):

@@ -225,7 +225,7 @@ def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
 def model_suggest_action(
     client: OpenAI,
     step: int,
-    grid: List[List[int]],
+    grid: List[List[Any]],
     placed_blocks:List[Dict[str,Any]],
     remaining_blocks: List[Dict[str, Any]],
     block_summaries: List[Dict[str, Any]],

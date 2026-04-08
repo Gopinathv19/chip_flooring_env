@@ -12,7 +12,7 @@ The chip_flooring_env environment is a simple test environment that echoes back 
 
 from __future__ import annotations
 
-from typing import Any,Optional
+from typing import Any, Optional
 
 from openenv.core.env_server.types import Action, Observation, State
 from pydantic import Field
@@ -34,7 +34,7 @@ class ChipFlooringAction(Action):
 class ChipFlooringObservation(Observation):
     """Observation from the Chip Flooring Env environment """
 
-    canva_space : list[list[int]] = Field(default=[[0]],description="The grid type structure to represent the canva space")
+    canva_space : list[list[Any]] = Field(default=[[None]],description="The grid structure with decoded block names")
     remaining_blocks : list[Any] = Field(default_factory=list,description="Used to give the agent detailing abouth what are all the remaining block are there")
     placed_blocks : list[Any] = Field(default_factory=list,description="Used to give the agent so far placed blocks")
     block_summaries : list[Any] = Field(default_factory=list,description="Connectivity summary for remaining blocks")
@@ -55,7 +55,7 @@ class ChipFlooringResponseState(State):
     episode_id : str = Field(default="",description="Used to identify the episode id")
     step_count : int = Field(default=0,description="Used to identify the step count")
     grid_size : int = Field(default=24,description="Used to identify the grid size")
-    grid : list[list[int]] = Field(default=[[0]],description="Used to identify the grid")     
+    grid : list[list[Any]] = Field(default=[[None]],description="Used to identify the grid")     
     blocks : list[Any] = Field(default_factory=list,description="Used to identify the blocks")
     placed_blocks : list[Any] = Field(default_factory=list,description="Used to identify the placed blocks")
     remaining_blocks : list[Any] = Field(default_factory=list,description="Used to identify the remaining blocks")
