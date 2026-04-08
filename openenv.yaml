@@ -53,6 +53,7 @@ observation:
   fields:
     task_name: string
     canva_space: list
+    board_ascii: string
     remaining_blocks: list
     placed_blocks: list
     block_summaries: list

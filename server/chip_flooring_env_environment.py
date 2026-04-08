@@ -409,12 +409,38 @@ class ChipFlooringEnvironment(Environment):
             "placed":block.placed,
             "position":block.position
         }
+
+    def _render_ascii_board(self) -> str:
+        if self.canvas is None:
+            return "Reset the environment to view the board."
+
+        id_by_number = {number: block_id for block_id, number in self.block_id_map.items()}
+        size = self.grid_size
+        cell_width = 2
+        lines = ["y"]
+
+        for row in range(size - 1, -1, -1):
+            row_cells = []
+            for col in range(size):
+                cell = self.canvas.grid[row][col]
+                if cell == 0:
+                    row_cells.append(" " * cell_width)
+                else:
+                    row_cells.append(f"{id_by_number.get(cell, cell):>{cell_width}}")
+            lines.append(f"{row:>2} |" + "".join(row_cells).rstrip())
+
+        axis = "   +" + "-" * (size * cell_width)
+        labels = "    " + "".join(f"{col:>{cell_width}}" for col in range(size)) + " (x)"
+        lines.append(axis)
+        lines.append(labels)
+        return "\n".join(lines)
     
     def _build_observation(self,invalid_reason: Optional[str]=None)->ChipFlooringObservation:
         remaining_block_summaries = [self._block_summary(b) for b in self._state.remaining_blocks]
         focus_block = remaining_block_summaries[0] if remaining_block_summaries else None
         return ChipFlooringObservation(
             canva_space=self.canvas.grid,
+            board_ascii=self._render_ascii_board(),
             remaining_blocks=[self._block_to_dict(b) for b in self._state.remaining_blocks],
             placed_blocks=[self._block_to_dict(b) for b in self._state.placed_blocks],
             block_summaries=remaining_block_summaries,

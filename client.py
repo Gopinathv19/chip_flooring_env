@@ -71,6 +71,7 @@ class ChipFlooringEnv(
         obs_data = payload.get("observation", {})
         observation = ChipFlooringObservation(
             canva_space=obs_data.get("canva_space", [[0]]),
+            board_ascii=obs_data.get("board_ascii", ""),
             remaining_blocks=obs_data.get("remaining_blocks", []),
             placed_blocks=obs_data.get("placed_blocks", []),
             block_summaries=obs_data.get("block_summaries", []),

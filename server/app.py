@@ -41,10 +41,12 @@ try:
     from ..models import ChipFlooringAction, ChipFlooringObservation
     from .chip_flooring_env_environment import ChipFlooringEnvironment
     from .graders import GRADERS
+    from .ui import build_clean_gradio_ui
 except ImportError:
     from models import ChipFlooringAction, ChipFlooringObservation
     from server.chip_flooring_env_environment import ChipFlooringEnvironment
     from server.graders import GRADERS
+    from server.ui import build_clean_gradio_ui
 from fastapi import Body
 
 
@@ -55,6 +57,7 @@ app = create_app(
     ChipFlooringObservation,
     env_name="chip_flooring_env",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    gradio_builder=build_clean_gradio_ui,
 )
 
 
