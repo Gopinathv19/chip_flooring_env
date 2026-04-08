@@ -34,7 +34,7 @@ tasks:
     grid_size: 12
     block_count: 5
     max_steps: 5
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
     grader: server.graders.grade_easy
 
   - id: medium
@@ -43,7 +43,7 @@ tasks:
     grid_size: 18
     block_count: 10
     max_steps: 10
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
     grader: server.graders.grade_medium
 
   - id: hard
@@ -52,5 +52,5 @@ tasks:
     grid_size: 24
     block_count: 15
     max_steps: 15
-    score_range: [0.0, 1.0]
+    score_range: [0.01, 0.99]
     grader: server.graders.grade_hard

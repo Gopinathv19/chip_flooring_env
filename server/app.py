@@ -86,7 +86,7 @@ def _task_summary() -> list[dict[str, object]]:
                 "grid_size": config["grid_size"],
                 "block_count": len(config["nodes"]),
                 "max_steps": len(config["nodes"]),
-                "score_range": [0.0, 1.0],
+                "score_range": [0.01, 0.99],
                 "grader": task_name in GRADERS,
                 "grader_ref": _TASK_GRADER_SPECS.get(task_name, ""),
             }

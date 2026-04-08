@@ -44,6 +44,11 @@ TASK_NAME = (
     or os.getenv("TASK_NAME")
     or "hard"
 ).strip().lower() or "hard"
+TASKS_TO_RUN = [
+    task.strip().lower()
+    for task in (os.getenv("OPENENV_CHIP_FLOORING_TASKS") or "easy,medium,hard").split(",")
+    if task.strip()
+]
 BENCHMARK = (
     os.getenv("OPENENV_CHIP_FLOORING_BENCHMARK")
     or os.getenv("BENCHMARK")
@@ -320,7 +325,7 @@ def compute_score(env: ChipFlooringEnvironment, rewards: List[float]) -> float:
     hpwl_quality = 1.0 - min(1.0, float(env.state.current_hpwl) / max(1.0, block_count * 4.0))
     reward_signal = sum(rewards) / max(1.0, float(len(rewards)))
     score = (0.5 * completion) + (0.3 * hpwl_quality) + (0.2 * max(0.0, min(1.0, reward_signal)))
-    return max(0.0, min(1.0, score))
+    return round(max(0.01, min(0.99, score)), 2)
 
 
 def choose_fallback_action(
@@ -354,23 +359,22 @@ def _is_local_api_base(url: str) -> bool:
     )
 
 
+def run_task(task_name: str, client: Optional[OpenAI]) -> float:
+    previous_task_name = os.environ.get("TASK_NAME")
+    os.environ["TASK_NAME"] = task_name
 
-
-def main() -> None:
-    resolved_api_key = API_KEY or ("lm-studio" if _is_local_api_base(API_BASE_URL) else None)
-    client = OpenAI(base_url=API_BASE_URL, api_key=resolved_api_key) if resolved_api_key else None
     env = ChipFlooringEnvironment()
     rewards: List[float] = []
     total_reward = 0.0
     steps_taken = 0
     success = False
-    consecutive_invalids=0
-    previous_failure=""
+    consecutive_invalids = 0
+    previous_failure = ""
     recent_history: List[Dict[str, Any]] = []
 
     log_start(
-        task=TASK_NAME,
-        env=BENCHMARK,
+        task=task_name,
+        env=f"chip_flooring_{task_name}",
         model=f"{MODEL_NAME} ({'local' if _is_local_api_base(API_BASE_URL) else 'huggingface'})",
     )
 
@@ -392,7 +396,7 @@ def main() -> None:
             if not candidate_actions:
                 candidate_actions = generate_candidate_actions(env, remaining_blocks, per_block_limit=1)
 
-            suggested,raw_content = model_suggest_action(
+            suggested, raw_content = model_suggest_action(
                 client,
                 step,
                 grid,
@@ -407,7 +411,7 @@ def main() -> None:
                 previous_failure=previous_failure,
             )
 
-            action,action_repr,parse_error = normalize_action(env,suggested)
+            action, action_repr, parse_error = normalize_action(env, suggested)
             if action is not None and not action_is_in_candidates(action_repr, candidate_actions):
                 action = None
                 action_repr = None
@@ -419,8 +423,8 @@ def main() -> None:
                     reward = -1.0
                     rewards.append(reward)
                     total_reward += reward
-                    steps_taken=step
-                    consecutive_invalids+=1
+                    steps_taken = step
+                    consecutive_invalids += 1
                     previous_failure = parse_error or "invalid model output"
                     recent_history.append(
                         {
@@ -432,8 +436,7 @@ def main() -> None:
                             "source": "model_failed_no_fallback",
                         }
                     )
-
-                    log_step(step=step,action="null",reward=reward,done=False,error=previous_failure)
+                    log_step(step=step, action="null", reward=reward, done=False, error=previous_failure)
                     continue
 
                 action = fallback_action
@@ -442,13 +445,13 @@ def main() -> None:
 
             result = env.step(action)
             obs = result
-            reward = float(getattr(result,"reward",0.0) or 0.0)
-            done = bool(getattr(result,"done",False))
-            invalid_reason = getattr(result,"invalid_reason",None)
+            reward = float(getattr(result, "reward", 0.0) or 0.0)
+            done = bool(getattr(result, "done", False))
+            invalid_reason = getattr(result, "invalid_reasons", None)
 
             rewards.append(reward)
             total_reward += reward
-            steps_taken=step
+            steps_taken = step
             recent_history.append(
                 {
                     "step": step,
@@ -480,7 +483,6 @@ def main() -> None:
             if done and not env.state.remaining_blocks:
                 success = True
                 break
-
     finally:
         close = getattr(env, "close", None)
         if callable(close):
@@ -490,10 +492,27 @@ def main() -> None:
                 pass
         score = compute_score(env, rewards)
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
-        
+        if previous_task_name is None:
+            os.environ.pop("TASK_NAME", None)
+        else:
+            os.environ["TASK_NAME"] = previous_task_name
+
+    return score
 
 
- 
+def main() -> None:
+    resolved_api_key = API_KEY or ("lm-studio" if _is_local_api_base(API_BASE_URL) else None)
+    client = OpenAI(base_url=API_BASE_URL, api_key=resolved_api_key) if resolved_api_key else None
+
+    task_scores: Dict[str, float] = {}
+    for task_name in TASKS_TO_RUN:
+        task_scores[task_name] = run_task(task_name, client)
+
+    print(
+        "[SUMMARY] "
+        + ", ".join(f"{task}={score:.2f}" for task, score in task_scores.items()),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
