@@ -10,7 +10,7 @@ port: 8000
 
 environment:
   mode: http
-  base_url: https://chip_flooring_env.hf.space
+  base_url: https://gopinathv19-chip_flooring_env.hf.space
   endpoints:
     reset: POST /reset
     step: POST /step

@@ -87,6 +87,11 @@ def list_tasks():
     return {"tasks": _task_summary()}
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.post("/grader")
 def grader(payload: dict | None = Body(default=None)):
     payload = payload or {}
