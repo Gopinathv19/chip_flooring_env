@@ -40,9 +40,11 @@ except Exception as e:  # pragma: no cover
 try:
     from ..models import ChipFlooringAction, ChipFlooringObservation
     from .chip_flooring_env_environment import ChipFlooringEnvironment
-except ModuleNotFoundError:
+    from .graders import GRADERS
+except ImportError:
     from models import ChipFlooringAction, ChipFlooringObservation
     from server.chip_flooring_env_environment import ChipFlooringEnvironment
+    from server.graders import GRADERS
 from fastapi import Body
 
 
@@ -72,11 +74,7 @@ def _task_summary() -> list[dict[str, object]]:
                 "block_count": len(config["nodes"]),
                 "max_steps": len(config["nodes"]),
                 "score_range": [0.0, 1.0],
-                "grader": {
-                    "type": "deterministic",
-                    "source": "environment_reward",
-                    "normalization": "completion_plus_hpwl",
-                },
+                "grader": task_name in GRADERS,
             }
         )
     return tasks

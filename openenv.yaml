@@ -5,7 +5,7 @@ description: Industrial chip floorplanning environment for training placement ag
 author: gopi-nts0117
 type: space
 runtime: fastapi
-app: server.app:app
+app: chip_flooring_env.server.app:app
 port: 8000
 
 environment:
@@ -28,11 +28,7 @@ tasks:
     block_count: 5
     max_steps: 5
     score_range: [0.0, 1.0]
-    grader:
-      type: deterministic
-      source: environment_reward
-      normalization: completion_plus_hpwl
-      objective: legality_and_local_connectivity
+    grader: chip_flooring_env.server.graders.easy_grader
 
   - id: medium
     difficulty: medium
@@ -41,11 +37,7 @@ tasks:
     block_count: 10
     max_steps: 10
     score_range: [0.0, 1.0]
-    grader:
-      type: deterministic
-      source: environment_reward
-      normalization: completion_plus_hpwl
-      objective: legality_connectivity_and_density
+    grader: chip_flooring_env.server.graders.medium_grader
 
   - id: hard
     difficulty: hard
@@ -54,11 +46,7 @@ tasks:
     block_count: 15
     max_steps: 15
     score_range: [0.0, 1.0]
-    grader:
-      type: deterministic
-      source: environment_reward
-      normalization: completion_plus_hpwl
-      objective: legality_connectivity_and_wirelength
+    grader: chip_flooring_env.server.graders.hard_grader
 
 observation:
   type: object
