@@ -1,2 +1,0 @@
-[console_scripts]
-server = chip_flooring_env.server.app:main
