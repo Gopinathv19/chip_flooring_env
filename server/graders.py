@@ -87,6 +87,10 @@ def easy_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     }
 
 
+def grade_easy(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return easy_grader(*args, **kwargs)
+
+
 def medium_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     payload = _parse_payload(*args, **kwargs)
     score = _compute_score(payload, "medium")
@@ -97,6 +101,10 @@ def medium_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     }
 
 
+def grade_medium(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return medium_grader(*args, **kwargs)
+
+
 def hard_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     payload = _parse_payload(*args, **kwargs)
     score = _compute_score(payload, "hard")
@@ -105,6 +113,10 @@ def hard_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         "grader_type": "deterministic",
         "difficulty": "hard",
     }
+
+
+def grade_hard(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return hard_grader(*args, **kwargs)
 
 
 GRADERS = {
