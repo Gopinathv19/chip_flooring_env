@@ -20,15 +20,15 @@ tags:
 tasks:
   - id: easy
     description: Place 5 connected blocks legally on a 12x12 grid while keeping connected blocks close.
-    grader: server.graders.grade_easy
+    grader: chip_flooring_env.server.graders.grade_easy
 
   - id: medium
     description: Place 10 connected blocks legally on an 18x18 grid while reducing congestion and HPWL.
-    grader: server.graders.grade_medium
+    grader: chip_flooring_env.server.graders.grade_medium
 
   - id: hard
     description: Place 15 connected blocks legally on a 24x24 grid while minimizing wirelength under tighter clustering pressure.
-    grader: server.graders.grade_hard
+    grader: chip_flooring_env.server.graders.grade_hard
  
 
  
