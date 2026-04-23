@@ -64,6 +64,8 @@ _TASK_GRADER_SPECS: dict[str, str] = {
     "easy": "server.graders.grade_easy",
     "medium": "server.graders.grade_medium",
     "hard": "server.graders.grade_hard",
+    "heterogeneous": "server.graders.grade_heterogeneous",
+    "fixed_obstacles": "server.graders.grade_fixed_obstacles",
 }
 
 
@@ -75,17 +77,26 @@ def _task_summary() -> list[dict[str, object]]:
     env = ChipFlooringEnvironment()
     tasks: list[dict[str, object]] = []
     for task_name, config in env.task_configs.items():
+        total_blocks = len(config["nodes"])
+        fixed_blocks = sum(1 for node in config["nodes"] if node.get("fixed"))
+        movable_blocks = total_blocks - fixed_blocks
         tasks.append(
             {
                 "id": task_name,
                 "difficulty": task_name,
                 "description": (
-                    f"Place {len(config['nodes'])} connected blocks on a {config['grid_size']}x{config['grid_size']} grid "
-                    f"while minimizing wirelength and keeping the placement legal."
+                    (
+                        f"Place {movable_blocks} movable blocks with {fixed_blocks} pre-placed fixed blocks "
+                        f"on a {config['grid_size']}x{config['grid_size']} grid while minimizing criticality-weighted wirelength and keeping the placement legal."
+                        if fixed_blocks > 0
+                        else f"Place {total_blocks} connected blocks on a {config['grid_size']}x{config['grid_size']} grid while minimizing criticality-weighted wirelength and keeping the placement legal."
+                    )
                 ),
                 "grid_size": config["grid_size"],
-                "block_count": len(config["nodes"]),
-                "max_steps": len(config["nodes"]),
+                "block_count": movable_blocks,
+                "max_steps": movable_blocks,
+                "total_block_count": total_blocks,
+                "fixed_block_count": fixed_blocks,
                 "score_range": [0.01, 0.99],
                 "grader": task_name in GRADERS,
                 "grader_ref": _TASK_GRADER_SPECS.get(task_name, ""),

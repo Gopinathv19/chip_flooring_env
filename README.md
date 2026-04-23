@@ -92,6 +92,9 @@ The reward is shaped to encourage:
 - lower wirelength / HPWL-style cost,
 - fewer invalid actions.
 
+Edges can also carry a `criticality` value, which increases the reward pressure on more important connections.
+That lets the task configs express both raw wirelength and connection importance.
+
 The reward is intentionally non-binary so the agent gets feedback throughout the episode.
  
 Each task has:

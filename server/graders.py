@@ -36,19 +36,58 @@ def _compute_score(payload: Dict[str, Any], difficulty: str) -> float:
 
     total_blocks = _as_int(payload.get("total_blocks") or payload.get("block_count"), 0)
     placed_raw = payload.get("placed_blocks", 0)
-    if isinstance(placed_raw, list):
-        placed_count = len(placed_raw)
+    remaining_raw = payload.get("remaining_blocks", [])
+    blocks_raw = payload.get("blocks", [])
+    placed_list = placed_raw if isinstance(placed_raw, list) else []
+    remaining_list = remaining_raw if isinstance(remaining_raw, list) else []
+    blocks_list = blocks_raw if isinstance(blocks_raw, list) else []
+
+    def _count_fixed(items: Any) -> int:
+        if not isinstance(items, list):
+            return 0
+        return sum(1 for item in items if isinstance(item, dict) and bool(item.get("fixed")))
+
+    def _count_unfixed(items: Any) -> int:
+        if not isinstance(items, list):
+            return 0
+        return sum(1 for item in items if not (isinstance(item, dict) and bool(item.get("fixed"))))
+
+    if placed_list:
+        placed_count = len(placed_list)
     else:
         placed_count = _as_int(placed_raw, 0)
+
+    fixed_count = 0
+    movable_total = total_blocks
+    if blocks_list:
+        fixed_count = _count_fixed(blocks_list)
+        movable_total = len(blocks_list) - fixed_count
+    elif placed_list or remaining_list:
+        fixed_count = _count_fixed(placed_list) + _count_fixed(remaining_list)
+        movable_total = len(placed_list) + len(remaining_list) - fixed_count
+
+    if total_blocks > 0 and fixed_count > 0:
+        movable_total = max(0, total_blocks - fixed_count)
 
     if total_blocks <= 0 and trajectory:
         last_step = trajectory[-1]
         remaining_raw = last_step.get("remaining_blocks", [])
         placed_raw = last_step.get("placed_blocks", [])
-        if isinstance(placed_raw, list):
-            placed_count = len(placed_raw)
-        if isinstance(remaining_raw, list):
-            total_blocks = placed_count + len(remaining_raw)
+        placed_list = placed_raw if isinstance(placed_raw, list) else []
+        remaining_list = remaining_raw if isinstance(remaining_raw, list) else []
+        if placed_list:
+            placed_count = len(placed_list)
+        if remaining_list:
+            total_blocks = placed_count + len(remaining_list)
+            fixed_count = _count_fixed(placed_list) + _count_fixed(remaining_list)
+            movable_total = max(0, total_blocks - fixed_count)
+
+    if movable_total > 0:
+        total_blocks = movable_total
+        if placed_list:
+            placed_count = _count_unfixed(placed_list)
+        elif fixed_count > 0:
+            placed_count = max(0, placed_count - fixed_count)
 
     completion = placed_count / max(1, total_blocks) if total_blocks > 0 else (1.0 if done else 0.0)
 
@@ -119,8 +158,38 @@ def grade_hard(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     return hard_grader(*args, **kwargs)
 
 
+def heterogeneous_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    payload = _parse_payload(*args, **kwargs)
+    score = _compute_score(payload, "hard")
+    return {
+        "score": score,
+        "grader_type": "deterministic",
+        "difficulty": "heterogeneous",
+    }
+
+
+def grade_heterogeneous(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return heterogeneous_grader(*args, **kwargs)
+
+
+def fixed_obstacles_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    payload = _parse_payload(*args, **kwargs)
+    score = _compute_score(payload, "hard")
+    return {
+        "score": score,
+        "grader_type": "deterministic",
+        "difficulty": "fixed_obstacles",
+    }
+
+
+def grade_fixed_obstacles(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return fixed_obstacles_grader(*args, **kwargs)
+
+
 GRADERS = {
     "easy": easy_grader,
     "medium": medium_grader,
     "hard": hard_grader,
+    "heterogeneous": heterogeneous_grader,
+    "fixed_obstacles": fixed_obstacles_grader,
 }

@@ -46,7 +46,10 @@ TASK_NAME = (
 ).strip().lower() or "hard"
 TASKS_TO_RUN = [
     task.strip().lower()
-    for task in (os.getenv("OPENENV_CHIP_FLOORING_TASKS") or "easy,medium,hard").split(",")
+    for task in (
+        os.getenv("OPENENV_CHIP_FLOORING_TASKS")
+        or "easy,medium,hard,heterogeneous,fixed_obstacles"
+    ).split(",")
     if task.strip()
 ]
 BENCHMARK = (
