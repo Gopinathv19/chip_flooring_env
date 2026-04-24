@@ -1,3 +1,4 @@
+import copy
 from uuid import uuid4
 import os
 import random
@@ -18,7 +19,7 @@ class ChipFlooringEnvironment(Environment):
  
     def __init__(self):
         """Initialize the chip_flooring_env environment."""
-        self.task_name = os.getenv("TASK_NAME", "hard").strip().lower() or "hard"
+        self.task_name = os.getenv("TASK_NAME", "hard_standard_long_horizon").strip().lower() or "hard_standard_long_horizon"
         self.grid_size = 24
         self.hpwl_weight = 0.25
         self.valid_placement_bonus = 0.05
@@ -42,7 +43,10 @@ class ChipFlooringEnvironment(Environment):
             "finalize": 0,
         }
         self._long_horizon_recent_positions: dict[str, list[tuple[int, int]]] = {}
+        self._long_horizon_move_counts: dict[str, int] = {}
+        self.task_aliases = self._build_task_aliases()
         self.task_configs = self._build_task_configs()
+        self.task_name = self._resolve_task_name(self.task_name)
         self.global_netlist = self._select_task_netlist(self.task_name)
         self.grid_size = self._select_task_grid_size(self.task_name)
         self._state = ChipFlooringResponseState(
@@ -131,9 +135,29 @@ class ChipFlooringEnvironment(Environment):
             self._state.reward=self.invalid_block_penalty
         else:
             block = self._state.blocks[current_block_index]
-            can_move = self._is_long_horizon_task() and self.phase in {"repair", "finalize"} and block in self._state.placed_blocks and not block.fixed
+            can_move = (
+                self._is_long_horizon_task()
+                and self.phase in {"repair", "finalize"}
+                and block in self._state.placed_blocks
+                and not block.fixed
+                and not getattr(block, "committed", False)
+            )
+            can_commit = (
+                self._is_long_horizon_task()
+                and self.phase in {"repair", "finalize"}
+                and block in self._state.placed_blocks
+                and not block.fixed
+                and action_mode == "commit"
+            )
 
-            if can_move:
+            if can_commit:
+                effective_action_mode = "commit"
+                block.fixed = True
+                block.committed = True
+                self._long_horizon_recent_positions.pop(block.id, None)
+                self._long_horizon_move_counts.pop(block.id, None)
+                self._state.reward = 0.2 if self.phase == "finalize" else 0.1
+            elif can_move:
                 effective_action_mode = "move"
                 if block.position == (row, col):
                     invalid_reasons = "The selected move keeps the block in the same position"
@@ -149,16 +173,20 @@ class ChipFlooringEnvironment(Environment):
                     else:
                         recent_positions = self._long_horizon_recent_positions.setdefault(block.id, [])
                         recent_positions.append((row, col))
-                        self._long_horizon_recent_positions[block.id] = recent_positions[-3:]
+                        self._long_horizon_recent_positions[block.id] = recent_positions[-8:]
+                        self._long_horizon_move_counts[block.id] = self._long_horizon_move_counts.get(block.id, 0) + 1
+                        block.move_count = self._long_horizon_move_counts[block.id]
                         incremental_hpwl = self._compute_total_hpwl() - previous_hpwl
                         self._state.delta_hpwl = incremental_hpwl
                         self._state.current_hpwl = previous_hpwl + incremental_hpwl
                         placed_neighbor_weight = self._placed_neighbor_weight(block)
                         move_penalty = 0.15 * max(1.0, float(block.power))
+                        oscillation_penalty = 0.04 * float(self._long_horizon_move_counts.get(block.id, 0))
                         phase_scale = 0.6 if self.phase == "repair" else 0.9
                         self._state.reward = (
                             phase_scale * (self.valid_placement_bonus + (0.02 * placed_neighbor_weight) - (self.hpwl_weight * incremental_hpwl * (max(1.0, float(block.power)) ** 2)))
                             - move_penalty
+                            - oscillation_penalty
                         )
             elif block in self._state.remaining_blocks:
                 effective_action_mode = "place"
@@ -195,8 +223,12 @@ class ChipFlooringEnvironment(Environment):
                 self._state.reward = self.invalid_block_penalty
 
             if self._is_long_horizon_task():
+                all_movable_committed = all(
+                    block.fixed or getattr(block, "committed", False)
+                    for block in self._state.placed_blocks
+                ) and len(self._state.remaining_blocks) == 0
                 finalize_step = self._long_horizon_phase_boundaries["finalize"]
-                if self._state.step_count >= finalize_step:
+                if (self._state.step_count >= finalize_step and len(self._state.remaining_blocks) == 0) or all_movable_committed:
                     self._state.done = True
                 else:
                     self._state.done = False
@@ -305,7 +337,7 @@ class ChipFlooringEnvironment(Environment):
             block.placed = True
 
     def _is_long_horizon_task(self) -> bool:
-        return self.task_name == "long_horizon"
+        return str(self.task_name).strip().lower().endswith("_long_horizon") or self.task_name == "long_horizon"
 
     def _edge_key(self, edge_info: dict, default: tuple[str, str] | None = None) -> tuple[str, str] | None:
         key = edge_info.get("edge_key")
@@ -315,6 +347,150 @@ class ChipFlooringEnvironment(Environment):
 
     def _should_reveal_hidden_constraints(self) -> bool:
         return self._is_long_horizon_task() and self._state.step_count >= self._long_horizon_phase_boundaries["reveal"]
+
+    def _build_task_aliases(self) -> dict[str, str]:
+        return {
+            "easy": "easy_standard_long_horizon",
+            "medium": "medium_standard_long_horizon",
+            "hard": "hard_standard_long_horizon",
+            "heterogeneous": "hard_heterogeneous_long_horizon",
+            "fixed_obstacles": "hard_fixed_obstacles_long_horizon",
+            "long_horizon": "hard_heterogeneous_long_horizon",
+        }
+
+    def _resolve_task_name(self, task_name: str) -> str:
+        normalized = str(task_name or "").strip().lower().replace("-", "_")
+        if not normalized:
+            return "hard_standard_long_horizon"
+        if normalized in self.task_configs:
+            return normalized
+        if normalized in self.task_aliases:
+            return self.task_aliases[normalized]
+        if normalized.endswith("_long_horizon") and normalized in self.task_configs:
+            return normalized
+        return "hard_standard_long_horizon"
+
+    def _clone_task_config(self, config: dict) -> dict:
+        return {
+            key: copy.deepcopy(value) if key in {"nodes", "edges"} else copy.deepcopy(value)
+            for key, value in config.items()
+        }
+
+    def _apply_heterogeneous_scenario(self, config: dict, difficulty: str) -> dict:
+        macro_count_by_difficulty = {"easy": 1, "medium": 3, "hard": 5}
+        macro_count = macro_count_by_difficulty.get(difficulty, 2)
+        nodes = config.get("nodes", [])
+        edges = config.get("edges", [])
+        degree: dict[str, float] = {str(node["id"]): 0.0 for node in nodes}
+        for edge in edges:
+            src = str(edge.get("from"))
+            dst = str(edge.get("to"))
+            weight = float(edge.get("weight", 0.0))
+            degree[src] = degree.get(src, 0.0) + weight
+            degree[dst] = degree.get(dst, 0.0) + weight
+
+        ranked_nodes = sorted(nodes, key=lambda node: (-degree.get(str(node["id"]), 0.0), str(node["id"])))
+        for index, node in enumerate(ranked_nodes[:macro_count]):
+            node["type"] = "macro"
+            node["power"] = round(2.4 + (0.35 * index) + (0.15 * macro_count), 2)
+
+        return config
+
+    def _apply_fixed_obstacles_scenario(self, config: dict, difficulty: str) -> dict:
+        grid_size = int(config.get("grid_size", self.grid_size))
+        obstacle_specs_by_difficulty = {
+            "easy": [
+                {"id": "P", "height": 2, "width": 2, "fixed": True, "position": [2, 2]},
+                {"id": "Q", "height": 1, "width": 3, "fixed": True, "position": [max(0, grid_size - 3), 2]},
+            ],
+            "medium": [
+                {"id": "P", "height": 2, "width": 2, "fixed": True, "position": [grid_size // 3, grid_size // 3]},
+                {"id": "Q", "height": 1, "width": 4, "fixed": True, "position": [max(0, grid_size - 4), 3]},
+                {"id": "R", "height": 3, "width": 1, "fixed": True, "position": [3, max(0, grid_size - 4)]},
+            ],
+            "hard": [
+                {"id": "P", "height": 2, "width": 2, "fixed": True, "position": [8, 8]},
+                {"id": "Q", "height": 1, "width": 4, "fixed": True, "position": [15, 4]},
+                {"id": "R", "height": 3, "width": 1, "fixed": True, "position": [4, 16]},
+            ],
+        }
+        obstacle_nodes = obstacle_specs_by_difficulty.get(difficulty, obstacle_specs_by_difficulty["medium"])
+        config["nodes"].extend(copy.deepcopy(obstacle_nodes))
+        anchor_nodes = [str(node["id"]) for node in config["nodes"] if not bool(node.get("fixed"))][:3]
+        obstacle_ids = [str(node["id"]) for node in obstacle_nodes]
+        for obstacle_id, anchor_id in zip(obstacle_ids, anchor_nodes):
+            config["edges"].append(
+                {
+                    "from": obstacle_id,
+                    "to": anchor_id,
+                    "weight": 1.2 + 0.2 * len(anchor_id),
+                    "criticality": 0.7,
+                }
+            )
+        return config
+
+    def _apply_long_horizon_profile(self, config: dict, difficulty: str, scenario: str) -> dict:
+        total_blocks = len(config.get("nodes", []))
+        scenario_bias = {
+            "standard": 0,
+            "heterogeneous": 2,
+            "fixed_obstacles": 3,
+        }.get(scenario, 1)
+        difficulty_bias = {"easy": 0, "medium": 2, "hard": 4}.get(difficulty, 2)
+        total_steps = max(24, total_blocks + 8 + scenario_bias + difficulty_bias)
+        reveal_step = max(4, total_blocks // 3)
+        repair_step = max(reveal_step + 4, (2 * total_steps) // 3)
+        finalize_step = max(repair_step + 1, total_steps)
+        hidden_fraction = {
+            "standard": 0.25,
+            "heterogeneous": 0.35,
+            "fixed_obstacles": 0.4,
+        }.get(scenario, 0.3)
+        if difficulty == "easy":
+            hidden_fraction -= 0.05
+        elif difficulty == "hard":
+            hidden_fraction += 0.05
+
+        config["phase_reveal_step"] = reveal_step
+        config["phase_repair_step"] = repair_step
+        config["phase_finalize_step"] = finalize_step
+        config["hidden_edge_fraction"] = round(max(0.15, min(0.55, hidden_fraction)), 2)
+        config["difficulty"] = difficulty
+        config["scenario"] = scenario
+        config["horizon"] = "long_horizon"
+        return config
+
+    def _build_composite_task_configs(self, base_configs: dict[str, dict]) -> dict[str, dict]:
+        composite_configs: dict[str, dict] = {}
+        for difficulty in ("easy", "medium", "hard"):
+            standard = self._apply_long_horizon_profile(
+                self._clone_task_config(base_configs[difficulty]),
+                difficulty,
+                "standard",
+            )
+            composite_configs[f"{difficulty}_standard_long_horizon"] = standard
+
+            heterogeneous = self._apply_heterogeneous_scenario(
+                self._clone_task_config(base_configs[difficulty]),
+                difficulty,
+            )
+            composite_configs[f"{difficulty}_heterogeneous_long_horizon"] = self._apply_long_horizon_profile(
+                heterogeneous,
+                difficulty,
+                "heterogeneous",
+            )
+
+            fixed_obstacles = self._apply_fixed_obstacles_scenario(
+                self._clone_task_config(base_configs[difficulty]),
+                difficulty,
+            )
+            composite_configs[f"{difficulty}_fixed_obstacles_long_horizon"] = self._apply_long_horizon_profile(
+                fixed_obstacles,
+                difficulty,
+                "fixed_obstacles",
+            )
+
+        return composite_configs
 
     def _configure_long_horizon_episode(self) -> None:
         self.phase = "placement"
@@ -328,6 +504,7 @@ class ChipFlooringEnvironment(Environment):
             "finalize": 0,
         }
         self._long_horizon_recent_positions = {}
+        self._long_horizon_move_counts = {}
 
         if not self._is_long_horizon_task():
             return
@@ -543,6 +720,8 @@ class ChipFlooringEnvironment(Environment):
             "type": block.type,
             "power": block.power,
             "fixed": block.fixed,
+            "committed": bool(getattr(block, "committed", False)),
+            "move_count": int(self._long_horizon_move_counts.get(block.id, 0)),
             "area": block.x * block.y,
             "degree": len(block.get_internal_netlist()),
             "priority_score": self._block_priority_score(block),
@@ -645,7 +824,7 @@ class ChipFlooringEnvironment(Environment):
         if self._is_long_horizon_task() and self.phase in {"repair", "finalize"}:
             movable_placed_blocks = [
                 block for block in self._state.placed_blocks
-                if not block.fixed and block.position is not None
+                if not block.fixed and block.position is not None and not getattr(block, "committed", False)
             ]
             movable_placed_blocks.sort(
                 key=lambda block: (
@@ -659,11 +838,33 @@ class ChipFlooringEnvironment(Environment):
                 block_num = self.block_id_map[block.id]
                 self.canvas.remove_region(original_position, block.y, block.x)
                 repair_candidates: list[dict] = []
+                move_count = self._long_horizon_move_counts.get(block.id, 0)
+                if self.phase == "finalize" or move_count > 0:
+                    repair_candidates.append(
+                        {
+                            "block_id": block.id,
+                            "x": int(original_position[0]),
+                            "y": int(original_position[1]),
+                            "height": block.x,
+                            "width": block.y,
+                            "score": round(
+                                self._anchor_score(block, int(original_position[0]), int(original_position[1]))
+                                + (0.15 if self.phase == "repair" else 0.5)
+                                + (0.1 * max(0, 2 - move_count)),
+                                4,
+                            ),
+                            "congestion_score": self._cluster_congestion_score(block, int(original_position[0]), int(original_position[1])),
+                            "priority_score": round(self._block_priority_score(block), 4),
+                            "action_type": "commit",
+                        }
+                    )
                 for row in range(self.grid_size):
                     for col in range(self.grid_size):
                         if (row, col) == original_position:
                             continue
                         if (row, col) in self._long_horizon_recent_positions.get(block.id, []):
+                            continue
+                        if self.phase == "finalize" and move_count >= 2:
                             continue
                         if not self.canvas.can_occupy((row, col), block.y, block.x):
                             continue
@@ -696,6 +897,8 @@ class ChipFlooringEnvironment(Environment):
             "type": block.type,
             "power": block.power,
             "fixed": block.fixed,
+            "committed": bool(getattr(block, "committed", False)),
+            "move_count": int(self._long_horizon_move_counts.get(block.id, 0)),
             "placed":block.placed,
             "position":block.position
         }
@@ -807,7 +1010,7 @@ class ChipFlooringEnvironment(Environment):
         )
 
     def _build_task_configs(self):
-        return {
+        configs = {
             "easy": {
                 "grid_size": 12,
                 "nodes": [
@@ -1039,16 +1242,21 @@ class ChipFlooringEnvironment(Environment):
                 ],
             },
         }
+        composite_configs = self._build_composite_task_configs(configs)
+        composite_configs["long_horizon"] = self._clone_task_config(composite_configs["hard_heterogeneous_long_horizon"])
+        return composite_configs
 
     def _select_task_netlist(self, task_name: str):
-        config = self.task_configs.get(task_name, self.task_configs["hard"])
+        resolved = self._resolve_task_name(task_name)
+        config = self.task_configs.get(resolved, self.task_configs["hard_standard_long_horizon"])
         return {
             "nodes": list(config["nodes"]),
             "edges": list(config["edges"]),
         }
 
     def _select_task_grid_size(self, task_name: str) -> int:
-        config = self.task_configs.get(task_name, self.task_configs["hard"])
+        resolved = self._resolve_task_name(task_name)
+        config = self.task_configs.get(resolved, self.task_configs["hard_standard_long_horizon"])
         return int(config["grid_size"])
     
 
@@ -1115,6 +1323,8 @@ class Block:
         self.type = block_type
         self.power = power
         self.fixed = fixed
+        self.committed = False
+        self.move_count = 0
         self.placed = False
         self.position = None
         self.internal_netlist = {}

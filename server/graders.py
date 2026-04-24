@@ -225,3 +225,7 @@ GRADERS = {
     "fixed_obstacles": fixed_obstacles_grader,
     "long_horizon": long_horizon_grader,
 }
+
+for difficulty in ("easy", "medium", "hard"):
+    for scenario in ("standard", "heterogeneous", "fixed_obstacles"):
+        GRADERS[f"{difficulty}_{scenario}_long_horizon"] = long_horizon_grader

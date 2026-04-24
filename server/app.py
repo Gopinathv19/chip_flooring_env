@@ -70,6 +70,22 @@ _TASK_GRADER_SPECS: dict[str, str] = {
 }
 
 
+def _parse_task_name(task_name: str) -> dict[str, str]:
+    normalized = str(task_name or "").strip().lower().replace("-", "_")
+    if normalized == "long_horizon":
+        return {"difficulty": "hard", "scenario": "heterogeneous", "horizon": "long_horizon"}
+    if normalized.endswith("_long_horizon"):
+        base = normalized[: -len("_long_horizon")]
+        parts = base.split("_", 1)
+        if len(parts) == 2:
+            return {
+                "difficulty": parts[0] or "hard",
+                "scenario": parts[1] or "standard",
+                "horizon": "long_horizon",
+            }
+    return {"difficulty": normalized, "scenario": "standard", "horizon": "short_horizon"}
+
+
 def _normalize_score(score: float) -> float:
     return round(max(0.01, min(0.99, score)), 2)
 
@@ -78,13 +94,16 @@ def _task_summary() -> list[dict[str, object]]:
     env = ChipFlooringEnvironment()
     tasks: list[dict[str, object]] = []
     for task_name, config in env.task_configs.items():
+        if task_name == "long_horizon":
+            continue
+        task_meta = _parse_task_name(task_name)
         total_blocks = len(config["nodes"])
         fixed_blocks = sum(1 for node in config["nodes"] if node.get("fixed"))
         movable_blocks = total_blocks - fixed_blocks
         max_steps = int(config.get("phase_finalize_step", movable_blocks))
-        if task_name == "long_horizon":
+        if task_meta["horizon"] == "long_horizon":
             description = (
-                f"Plan, reveal, and repair a {total_blocks}-block layout on a {config['grid_size']}x{config['grid_size']} grid "
+                f"Plan, reveal, and repair a {task_meta['difficulty']} {task_meta['scenario']} layout on a {config['grid_size']}x{config['grid_size']} grid "
                 f"with hidden constraints, delayed reward, and a later repair phase."
             )
         else:
@@ -99,7 +118,9 @@ def _task_summary() -> list[dict[str, object]]:
         tasks.append(
             {
                 "id": task_name,
-                "difficulty": task_name,
+                "difficulty": task_meta["difficulty"],
+                "scenario": task_meta["scenario"],
+                "horizon": task_meta["horizon"],
                 "description": description,
                 "grid_size": config["grid_size"],
                 "block_count": movable_blocks,
@@ -108,7 +129,7 @@ def _task_summary() -> list[dict[str, object]]:
                 "fixed_block_count": fixed_blocks,
                 "score_range": [0.01, 0.99],
                 "grader": task_name in GRADERS,
-                "grader_ref": _TASK_GRADER_SPECS.get(task_name, ""),
+                "grader_ref": _TASK_GRADER_SPECS.get(task_name, _TASK_GRADER_SPECS.get(task_meta["horizon"], "")),
             }
         )
     return tasks
@@ -125,8 +146,8 @@ def grader(payload: dict | None = Body(default=None)):
     task_name = str(
         payload.get("task_name")
         or payload.get("task_id")
-        or os.getenv("TASK_NAME", "hard")
-    ).strip().lower() or "hard"
+        or os.getenv("TASK_NAME", "hard_standard_long_horizon")
+    ).strip().lower() or "hard_standard_long_horizon"
     grader_fn = GRADERS.get(task_name)
     if grader_fn is not None:
         result = dict(grader_fn(payload))

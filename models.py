@@ -95,7 +95,7 @@ class ChipFlooringObservation(Observation):
         default=0,
         description="Number of blocks already placed",
     )
-    task_name: str = Field(default="hard", description="Current task difficulty name")
+    task_name: str = Field(default="hard_standard_long_horizon", description="Current task difficulty name")
     phase: str = Field(default="placement", description="Current long-horizon phase")
     phase_step: int = Field(default=0, description="Step count within the current phase")
     instruction: str = Field(
@@ -143,7 +143,7 @@ class ChipFlooringResponseState(State):
         default=0.0, description="HPWL cost added by the latest placement"
     )
     task_name: str = Field(
-        default="hard", description="Current difficulty task name"
+        default="hard_standard_long_horizon", description="Current difficulty task name"
     )
     phase: str = Field(default="placement", description="Current environment phase")
     phase_step: int = Field(default=0, description="Step count within the current phase")

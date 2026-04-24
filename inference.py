@@ -42,16 +42,13 @@ MODEL_NAME = os.getenv("MODEL_NAME") or "meta-llama/Llama-3.3-70B-Instruct"
 TASK_NAME = (
     os.getenv("OPENENV_CHIP_FLOORING_TASK")
     or os.getenv("TASK_NAME")
-    or "hard"
-).strip().lower() or "hard"
-TASKS_TO_RUN = [
-    task.strip().lower()
-    for task in (
-        os.getenv("OPENENV_CHIP_FLOORING_TASKS")
-        or "easy,medium,hard,heterogeneous,fixed_obstacles,long_horizon"
-    ).split(",")
-    if task.strip()
-]
+    or "hard_standard_long_horizon"
+).strip().lower() or "hard_standard_long_horizon"
+TASKS_TO_RUN_ENV = os.getenv("OPENENV_CHIP_FLOORING_TASKS")
+if TASKS_TO_RUN_ENV:
+    TASKS_TO_RUN = [task.strip().lower() for task in TASKS_TO_RUN_ENV.split(",") if task.strip()]
+else:
+    TASKS_TO_RUN = [TASK_NAME]
 BENCHMARK = (
     os.getenv("OPENENV_CHIP_FLOORING_BENCHMARK")
     or os.getenv("BENCHMARK")
@@ -103,6 +100,11 @@ def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> No
     )
 
 
+def is_long_horizon_task_name(task_name: str) -> bool:
+    normalized = str(task_name or "").strip().lower()
+    return normalized.endswith("_long_horizon") or normalized == "long_horizon"
+
+
 def summarize_history(history: List[Dict[str, Any]], limit: int = 8) -> List[Dict[str, Any]]:
     return history[-limit:]
 
@@ -111,6 +113,8 @@ def compact_block_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": summary.get("id"),
         "priority": round(float(summary.get("priority_score", 0.0)), 3),
+        "committed": bool(summary.get("committed", False)),
+        "move_count": int(summary.get("move_count", 0) or 0),
         "placed_neighbors": [
             {
                 "id": neighbor.get("id"),
@@ -185,6 +189,17 @@ def generate_candidate_actions(
             )
             if block_num is None:
                 continue
+            candidates.append(
+                {
+                    "block_id": block_id,
+                    "x": int(row0),
+                    "y": int(col0),
+                    "height": height,
+                    "width": width,
+                    "area": height * width,
+                    "action_type": "commit",
+                }
+            )
             env.canvas.remove_region((int(row0), int(col0)), width, height)
             found = 0
             for row in range(env.grid_size):
@@ -239,8 +254,9 @@ def build_prompt(
     candidates_compact = candidate_actions[:8]
     return (
         "Choose one action from the candidate actions.\n"
-        "Return JSON only: {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"place\"}.\n"
+        "Return JSON only with one of these forms: {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"place\"}, {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"move\"}, or {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"commit\"}.\n"
         "Use action_type=\"move\" only when the episode is in repair or finalize and the candidate is a relocation.\n"
+        "Use action_type=\"commit\" in repair or finalize when the current position should be locked and no further relocation is needed.\n"
         "Prefer the action that best reduces wirelength while staying legal.\n"
         "Use the focus block, placed neighbor positions, phase, instruction, and candidate scores.\n\n"
         f"step={step}\n"
@@ -319,10 +335,10 @@ def model_suggest_action(
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {
-                    "role": "system",
-                    "content": "Return only one JSON object with block_id, x, y, and optional action_type.",
-                },
+            {
+                "role": "system",
+                "content": "Return only one JSON object with block_id, x, y, and optional action_type (place, move, or commit).",
+            },
                 {"role": "user", "content": user_prompt},
             ],
             temperature=TEMPERATURE,
@@ -446,7 +462,7 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
         obs = env.reset()
 
         for step in range(1, MAX_STEPS + 1):
-            if not env.state.remaining_blocks and task_name != "long_horizon":
+            if not env.state.remaining_blocks and not is_long_horizon_task_name(task_name):
                 success = True
                 break
 
@@ -557,7 +573,7 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
             if done and not env.state.remaining_blocks:
                 success = True
                 break
-            if task_name == "long_horizon" and done:
+            if is_long_horizon_task_name(task_name) and done:
                 success = not env.state.remaining_blocks
                 break
     finally:
