@@ -8,70 +8,143 @@ import gradio as gr
 from PIL import Image, ImageDraw
 
 _CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 :root{
-  --bg:#06101a;
-  --panel:#0b1624;
-  --panel2:#09111d;
-  --stroke:#1a2a40;
-  --muted:#8091aa;
-  --text:#e8f0fb;
-  --cyan:#00d8ff;
-  --cyan2:#14a7d8;
-  --good:#30d18a;
-  --bad:#ff6d6d;
+  --bg:#f4efe7;
+  --bg2:#ece3d6;
+  --panel:#fffaf2;
+  --panel2:#ffffff;
+  --stroke:#d4c6b2;
+  --muted:#6f6254;
+  --text:#2c241b;
+  --accent:#106c56;
+  --accent2:#0a503f;
+  --chip:#0d5f4c;
+  --good:#0b7d44;
+  --bad:#b42318;
 }
 
 footer{display:none !important;}
-.gradio-container{background:var(--bg) !important;}
-.wrap{
+.gradio-container{
   background:
-    radial-gradient(900px 620px at 20% 10%, rgba(0,216,255,.08), transparent 56%),
-    radial-gradient(720px 560px at 90% 20%, rgba(124,92,252,.08), transparent 60%),
-    var(--bg);
+    radial-gradient(1200px 680px at 15% -10%, #fef9ee 18%, transparent 62%),
+    radial-gradient(860px 520px at 90% 0%, #e7f2ec 10%, transparent 58%),
+    linear-gradient(170deg, var(--bg), var(--bg2)) !important;
+  font-family:"Space Grotesk", "Segoe UI", sans-serif !important;
+}
+.gradio-container *{box-sizing:border-box;}
+.wrap{
+  max-width:1420px;
+  margin:0 auto;
+  background:rgba(255,255,255,.58);
+  backdrop-filter: blur(5px);
   border:1px solid var(--stroke);
-  border-radius:16px;
-  padding:12px;
+  border-radius:24px;
+  padding:14px;
+  box-shadow:0 20px 44px rgba(62, 47, 30, .08);
 }
 .topbar{
   display:flex;
-  align-items:flex-start;
+  align-items:stretch;
   justify-content:space-between;
-  gap:12px;
-  margin-bottom:10px;
+  gap:10px;
+  margin-bottom:12px;
 }
-.title{color:var(--text); font-weight:800; font-size:1.03rem; letter-spacing:.02em;}
-.subtitle{color:var(--muted); font-size:.78rem; margin-top:2px;}
+.hero{
+  border:1px solid var(--stroke);
+  border-radius:18px;
+  background:linear-gradient(140deg, #fffaf2, #f7f1e8);
+  padding:14px;
+}
+.title{
+  color:var(--text);
+  font-weight:700;
+  font-size:1.45rem;
+  letter-spacing:.01em;
+  line-height:1.18;
+}
+.subtitle{
+  color:var(--muted);
+  font-size:.86rem;
+  margin-top:6px;
+  line-height:1.35;
+}
+.mono{font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;}
 .panel,.boardPanel{
   border:1px solid var(--stroke);
-  border-radius:14px;
-  background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel);
-  padding:10px;
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.84)), var(--panel);
+  padding:12px;
 }
-.boardPanel{background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel2);}
-.stats{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+.boardPanel{
+  background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.86)), var(--panel2);
+  min-height:760px;
+}
+.stats{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(136px, 1fr));
+  gap:8px;
+}
 .stat{
-  min-width:120px;
+  min-width:0;
   border:1px solid var(--stroke);
   border-radius:12px;
   padding:8px 10px;
-  background:rgba(255,255,255,.03);
+  background:linear-gradient(180deg, #ffffff, #fbf5eb);
+  box-shadow:0 2px 10px rgba(35, 28, 20, .05);
 }
-.k{color:var(--muted); font-size:.68rem; text-transform:uppercase; letter-spacing:.1em;}
-.v{color:var(--text); font-size:1.18rem; font-weight:800; margin-top:2px;}
+.k{color:var(--muted); font-size:.67rem; text-transform:uppercase; letter-spacing:.1em;}
+.v{color:var(--text); font-size:1.05rem; font-weight:700; margin-top:2px; line-height:1.2;}
 .vGood{color:var(--good);}
 .vBad{color:var(--bad);}
-.hint{color:var(--muted); font-size:.78rem; line-height:1.45; margin-top:8px;}
+.hint{color:var(--muted); font-size:.8rem; line-height:1.45; margin-top:8px;}
 .chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
 .chip{
-  border:1px solid rgba(0,216,255,.22);
-  background:rgba(0,216,255,.08);
-  color:var(--cyan);
+  border:1px solid rgba(13,95,76,.22);
+  background:rgba(13,95,76,.08);
+  color:var(--chip);
   border-radius:999px;
   padding:4px 8px;
   font-size:.72rem;
   line-height:1;
+  font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .section{margin-top:8px;}
+.boardHint{
+  border:1px dashed var(--stroke);
+  border-radius:12px;
+  padding:8px 10px;
+  background:#fffdf8;
+}
+.ctrlTitle{
+  margin:0 0 10px 0;
+  font-size:1.03rem;
+  color:var(--text);
+}
+.gradio-container .gr-form, .gradio-container .gr-box{border-color:var(--stroke) !important;}
+.gradio-container .gr-button-primary{
+  background:linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+  border:0 !important;
+}
+.gradio-container .gr-button-secondary{
+  background:#efe4d6 !important;
+  color:var(--text) !important;
+  border:1px solid var(--stroke) !important;
+}
+.gradio-container .gr-input, .gradio-container .gr-dropdown, .gradio-container .gr-number{
+  border-color:var(--stroke) !important;
+}
+.quickstart{
+  margin-top:10px;
+  border:1px solid var(--stroke);
+  border-radius:14px;
+  background:rgba(255,255,255,.8);
+}
+@media (max-width: 1150px){
+  .stats{grid-template-columns:repeat(2, minmax(130px,1fr));}
+  .boardPanel{min-height:620px;}
+}
 """
 
 
@@ -402,8 +475,8 @@ def build_clean_gradio_ui(
     def _task_banner(task_name: str) -> str:
         return (
             "<div class='hint'>"
-            f"<strong>Selected task:</strong> {task_name}. "
-            "Choose a task, press Reset, then place the next block on the board."
+            f"<strong>Selected task:</strong> <span class='mono'>{task_name}</span>. "
+            "Press Reset to start a fresh episode, then choose coordinates and place one block per step."
             "</div>"
         )
 
@@ -412,16 +485,18 @@ def build_clean_gradio_ui(
 
         with gr.Group(elem_classes=["wrap"]):
             with gr.Row(elem_classes=["topbar"]):
-                with gr.Column(scale=6):
-                    gr.HTML(
-                        f"<div class='title'>{title}</div>"
-                        "<div class='subtitle'>Human-facing placement interface. No raw observation JSON is shown.</div>"
-                    )
                 with gr.Column(scale=5):
+                    gr.HTML(
+                        "<div class='hero'>"
+                        f"<div class='title'>{title}</div>"
+                        "<div class='subtitle'>Interactive chip placement UI with guided controls and clean visual feedback. Raw observation JSON is hidden for easier human operation.</div>"
+                        "</div>"
+                    )
+                with gr.Column(scale=7):
                     status_panel = gr.HTML(value=_render_status({}, default_task))
 
             with gr.Row(equal_height=False):
-                with gr.Column(scale=9):
+                with gr.Column(scale=8):
                     with gr.Group(elem_classes=["boardPanel"]):
                         board = gr.Image(
                             value=_board_for_state(state0),
@@ -430,10 +505,10 @@ def build_clean_gradio_ui(
                             type="pil",
                             height=680,
                         )
-                        gr.HTML("<div class='hint'>Click a cell to set coordinates. The cyan outline is the current preview.</div>")
-                with gr.Column(scale=3):
+                        gr.HTML("<div class='hint boardHint'>Click on any board cell to auto-fill X and Y. The highlighted cell is the current preview position.</div>")
+                with gr.Column(scale=4):
                     with gr.Group(elem_classes=["panel"]):
-                        gr.HTML("<h3 style='margin:0 0 8px 0;'>Controls</h3>")
+                        gr.HTML("<h3 class='ctrlTitle'>Controls</h3>")
                         task_dd = gr.Dropdown(
                             label="Task",
                             choices=task_options,
@@ -449,6 +524,9 @@ def build_clean_gradio_ui(
                         gr.HTML("<div class='section'>Remaining blocks</div>")
                         remaining_html = gr.HTML(value=_render_block_chips(None))
                         task_hint = gr.HTML(value=_task_banner(default_task))
+            if quick_start_md:
+                with gr.Accordion("Quick Start", open=False, elem_classes=["quickstart"]):
+                    gr.Markdown(quick_start_md)
 
         async def do_reset(task_name: str, s: Dict[str, Any]):
             s = dict(s or state0)
