@@ -150,6 +150,7 @@ def _render_status(data: Dict[str, Any], selected_task: str) -> str:
     phase = str(obs.get("phase") or "placement")
     reward_class = "vGood" if reward >= 0 else "vBad"
     reward_sign = "+" if reward >= 0 else ""
+    hpwl_fallback = "<div class='k'>HPWL</div><div class='v'>-</div>"
 
     hpwl_html = ""
     if hpwl is not None:
@@ -178,7 +179,7 @@ def _render_status(data: Dict[str, Any], selected_task: str) -> str:
         f"<div class='v' style='font-size:1rem;'>{phase}</div>"
         "</div>"
         "<div class='stat'>"
-        f"{hpwl_html or '<div class=\"k\">HPWL</div><div class=\"v\">-</div>'}"
+        f"{hpwl_html or hpwl_fallback}"
         "</div>"
         "<div class='stat'>"
         "<div class='k'>Done</div>"
