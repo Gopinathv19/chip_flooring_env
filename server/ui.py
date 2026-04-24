@@ -18,8 +18,12 @@ def _format_status(data: Dict[str, Any]) -> str:
     done = data.get("done")
     observation = data.get("observation", {})
     task_name = observation.get("task_name", "unknown") if isinstance(observation, dict) else "unknown"
+    phase = observation.get("phase", "placement") if isinstance(observation, dict) else "placement"
+    instruction = observation.get("instruction", "") if isinstance(observation, dict) else ""
     invalid = observation.get("invalid_reasons") if isinstance(observation, dict) else None
-    parts = [f"Reward: `{reward}`", f"Done: `{done}`", f"Task: `{task_name}`"]
+    parts = [f"Reward: `{reward}`", f"Done: `{done}`", f"Task: `{task_name}`", f"Phase: `{phase}`"]
+    if instruction:
+        parts.append(f"Instruction: `{instruction}`")
     if invalid:
         parts.append(f"Invalid: `{invalid}`")
     return " | ".join(parts)

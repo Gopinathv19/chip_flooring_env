@@ -23,6 +23,11 @@ class ChipFlooringAction(Action):
     Action for the chip flooring environment 
     """
 
+    action_type: str = Field(
+        default="place",
+        description="Action mode, either place or move depending on the task phase",
+    )
+
     x: int = Field(
         default=0,
         ge=0,
@@ -91,6 +96,20 @@ class ChipFlooringObservation(Observation):
         description="Number of blocks already placed",
     )
     task_name: str = Field(default="hard", description="Current task difficulty name")
+    phase: str = Field(default="placement", description="Current long-horizon phase")
+    phase_step: int = Field(default=0, description="Step count within the current phase")
+    instruction: str = Field(
+        default="",
+        description="Current long-horizon instruction or planning directive",
+    )
+    hidden_constraint_count: int = Field(
+        default=0,
+        description="Number of currently hidden critical constraints",
+    )
+    revealed_constraint_count: int = Field(
+        default=0,
+        description="Number of constraints revealed to the agent",
+    )
     invalid_reasons: Optional[str] = Field(
         default=None,
         description="Reason for the last action was rejected",
@@ -125,6 +144,17 @@ class ChipFlooringResponseState(State):
     )
     task_name: str = Field(
         default="hard", description="Current difficulty task name"
+    )
+    phase: str = Field(default="placement", description="Current environment phase")
+    phase_step: int = Field(default=0, description="Step count within the current phase")
+    instruction: str = Field(default="", description="Current planning instruction")
+    hidden_constraint_count: int = Field(
+        default=0,
+        description="Number of hidden long-horizon constraints",
+    )
+    revealed_constraint_count: int = Field(
+        default=0,
+        description="Number of revealed long-horizon constraints",
     )
     trajectory: list[Any] = Field(
         default_factory=list,

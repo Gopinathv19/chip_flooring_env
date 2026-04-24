@@ -66,6 +66,7 @@ _TASK_GRADER_SPECS: dict[str, str] = {
     "hard": "server.graders.grade_hard",
     "heterogeneous": "server.graders.grade_heterogeneous",
     "fixed_obstacles": "server.graders.grade_fixed_obstacles",
+    "long_horizon": "server.graders.grade_long_horizon",
 }
 
 
@@ -80,21 +81,29 @@ def _task_summary() -> list[dict[str, object]]:
         total_blocks = len(config["nodes"])
         fixed_blocks = sum(1 for node in config["nodes"] if node.get("fixed"))
         movable_blocks = total_blocks - fixed_blocks
+        max_steps = int(config.get("phase_finalize_step", movable_blocks))
+        if task_name == "long_horizon":
+            description = (
+                f"Plan, reveal, and repair a {total_blocks}-block layout on a {config['grid_size']}x{config['grid_size']} grid "
+                f"with hidden constraints, delayed reward, and a later repair phase."
+            )
+        else:
+            description = (
+                (
+                    f"Place {movable_blocks} movable blocks with {fixed_blocks} pre-placed fixed blocks "
+                    f"on a {config['grid_size']}x{config['grid_size']} grid while minimizing criticality-weighted wirelength and keeping the placement legal."
+                    if fixed_blocks > 0
+                    else f"Place {total_blocks} connected blocks on a {config['grid_size']}x{config['grid_size']} grid while minimizing criticality-weighted wirelength and keeping the placement legal."
+                )
+            )
         tasks.append(
             {
                 "id": task_name,
                 "difficulty": task_name,
-                "description": (
-                    (
-                        f"Place {movable_blocks} movable blocks with {fixed_blocks} pre-placed fixed blocks "
-                        f"on a {config['grid_size']}x{config['grid_size']} grid while minimizing criticality-weighted wirelength and keeping the placement legal."
-                        if fixed_blocks > 0
-                        else f"Place {total_blocks} connected blocks on a {config['grid_size']}x{config['grid_size']} grid while minimizing criticality-weighted wirelength and keeping the placement legal."
-                    )
-                ),
+                "description": description,
                 "grid_size": config["grid_size"],
                 "block_count": movable_blocks,
-                "max_steps": movable_blocks,
+                "max_steps": max_steps,
                 "total_block_count": total_blocks,
                 "fixed_block_count": fixed_blocks,
                 "score_range": [0.01, 0.99],

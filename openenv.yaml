@@ -72,3 +72,12 @@ tasks:
     max_steps: 15
     score_range: [0.01, 0.99]
     grader: server.graders.grade_fixed_obstacles
+
+  - id: long_horizon
+    difficulty: long_horizon
+    description: Plan, reveal, and repair a 24-block layout on a 28x28 grid with hidden constraints and a repair phase.
+    grid_size: 28
+    block_count: 24
+    max_steps: 30
+    score_range: [0.01, 0.99]
+    grader: server.graders.grade_long_horizon

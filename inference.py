@@ -48,7 +48,7 @@ TASKS_TO_RUN = [
     task.strip().lower()
     for task in (
         os.getenv("OPENENV_CHIP_FLOORING_TASKS")
-        or "easy,medium,hard,heterogeneous,fixed_obstacles"
+        or "easy,medium,hard,heterogeneous,fixed_obstacles,long_horizon"
     ).split(",")
     if task.strip()
 ]
@@ -133,6 +133,8 @@ def compact_block_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
 def generate_candidate_actions(
     env: ChipFlooringEnvironment,
     remaining_blocks: List[Dict[str, Any]],
+    placed_blocks: Optional[List[Dict[str, Any]]] = None,
+    phase: str = "placement",
     per_block_limit: int = 1,
 ) -> List[Dict[str, Any]]:
     if env.canvas is None:
@@ -167,6 +169,54 @@ def generate_candidate_actions(
             if found >= per_block_limit:
                 break
 
+    if phase in {"repair", "finalize"} and placed_blocks:
+        movable_blocks = sorted(
+            [block for block in placed_blocks if not bool(block.get("fixed")) and block.get("position") is not None],
+            key=lambda block: (-float(block.get("power", 1.0)), str(block["id"])),
+        )
+        for block in movable_blocks[:4]:
+            row0, col0 = block["position"]
+            height = int(block["height"])
+            width = int(block["width"])
+            block_id = str(block["id"])
+            block_num = next(
+                (idx + 1 for idx, existing in enumerate(env.state.blocks) if existing.id == block_id),
+                None,
+            )
+            if block_num is None:
+                continue
+            env.canvas.remove_region((int(row0), int(col0)), width, height)
+            found = 0
+            for row in range(env.grid_size):
+                for col in range(env.grid_size):
+                    if env.canvas.can_occupy((row, col), width, height):
+                        candidates.append(
+                            {
+                                "block_id": block_id,
+                                "x": row,
+                                "y": col,
+                                "height": height,
+                                "width": width,
+                                "area": height * width,
+                                "action_type": "move",
+                            }
+                        )
+                        found += 1
+                        if found >= per_block_limit:
+                            break
+                if found >= per_block_limit:
+                    break
+            env.canvas.occupy_region((int(row0), int(col0)), width, height, block_num)
+
+    candidates.sort(
+        key=lambda item: (
+            str(item.get("action_type", "place")),
+            -float(item.get("area", 0.0)),
+            str(item["block_id"]),
+            int(item["x"]),
+            int(item["y"]),
+        )
+    )
     return candidates
 
 
@@ -174,6 +224,8 @@ def build_prompt(
     step: int,
     placed_blocks: List[Dict[str, Any]],
     remaining_blocks: List[Dict[str, Any]],
+    phase: str,
+    instruction: str,
     block_summaries: List[Dict[str, Any]],
     placement_focus: Optional[Dict[str, Any]],
     density_map: List[List[float]],
@@ -186,11 +238,14 @@ def build_prompt(
     summaries_compact = [compact_block_summary(summary) for summary in block_summaries[:6]]
     candidates_compact = candidate_actions[:8]
     return (
-        "Choose one placement from the candidate actions.\n"
-        "Return JSON only: {\"block_id\":\"...\",\"x\":0,\"y\":0}.\n"
+        "Choose one action from the candidate actions.\n"
+        "Return JSON only: {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"place\"}.\n"
+        "Use action_type=\"move\" only when the episode is in repair or finalize and the candidate is a relocation.\n"
         "Prefer the action that best reduces wirelength while staying legal.\n"
-        "Use the focus block, placed neighbor positions, and candidate scores.\n\n"
+        "Use the focus block, placed neighbor positions, phase, instruction, and candidate scores.\n\n"
         f"step={step}\n"
+        f"phase={phase}\n"
+        f"instruction={instruction}\n"
         f"placed_count={len(placed_blocks)} remaining_count={len(remaining_blocks)} total_reward={total_reward:.2f}\n"
         f"focus={json.dumps(focus_compact)}\n"
         f"summaries={json.dumps(summaries_compact)}\n"
@@ -236,6 +291,8 @@ def model_suggest_action(
     grid: List[List[int]],
     placed_blocks:List[Dict[str,Any]],
     remaining_blocks: List[Dict[str, Any]],
+    phase: str,
+    instruction: str,
     block_summaries: List[Dict[str, Any]],
     placement_focus: Optional[Dict[str, Any]],
     density_map: List[List[float]],
@@ -249,6 +306,8 @@ def model_suggest_action(
             step,
             placed_blocks,
             remaining_blocks,
+            phase,
+            instruction,
             block_summaries,
             placement_focus,
             density_map,
@@ -262,7 +321,7 @@ def model_suggest_action(
             messages=[
                 {
                     "role": "system",
-                    "content": "Return only one JSON object with block_id, x, and y.",
+                    "content": "Return only one JSON object with block_id, x, y, and optional action_type.",
                 },
                 {"role": "user", "content": user_prompt},
             ],
@@ -286,6 +345,7 @@ def normalize_action(
     block_id = action_data.get("block_id")
     x=action_data.get("x")
     y=action_data.get("y")
+    action_type = str(action_data.get("action_type", "place") or "place").strip().lower()
 
     if not isinstance(block_id,str) or not isinstance(x,int) or not isinstance(y,int):
         return None,None,"invalid_action_fields"
@@ -293,8 +353,8 @@ def normalize_action(
     index=next((i for i, block in enumerate(env.state.blocks) if block.id==block_id),-1)
 
     return(
-        ChipFlooringAction(x=x,y=y,choosen_block_index=index),
-        {"block_id":block_id,"x":x,"y":y},
+        ChipFlooringAction(x=x,y=y,choosen_block_index=index, action_type=action_type),
+        {"block_id":block_id,"x":x,"y":y,"action_type":action_type},
         None,
     )
 
@@ -351,6 +411,7 @@ def choose_fallback_action(
             x=int(candidate["x"]),
             y=int(candidate["y"]),
             choosen_block_index=index,
+            action_type=str(candidate.get("action_type", "place")),
         ),
         candidate,
     )
@@ -385,19 +446,27 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
         obs = env.reset()
 
         for step in range(1, MAX_STEPS + 1):
-            if not env.state.remaining_blocks:
+            if not env.state.remaining_blocks and task_name != "long_horizon":
                 success = True
                 break
 
             grid = getattr(obs, "canva_space", env.canvas.grid if env.canvas else [])
             placed_blocks = getattr(obs, "placed_blocks", [])
             remaining_blocks = getattr(obs, "remaining_blocks", [])
+            phase = getattr(obs, "phase", "placement")
+            instruction = getattr(obs, "instruction", "")
             block_summaries = getattr(obs, "block_summaries", [])
             placement_focus = getattr(obs, "placement_focus", None)
             density_map = getattr(obs, "density_map", [])
             candidate_actions = getattr(obs, "candidate_positions", [])
             if not candidate_actions:
-                candidate_actions = generate_candidate_actions(env, remaining_blocks, per_block_limit=1)
+                candidate_actions = generate_candidate_actions(
+                    env,
+                    remaining_blocks,
+                    placed_blocks=placed_blocks,
+                    phase=phase,
+                    per_block_limit=1,
+                )
 
             suggested, raw_content = model_suggest_action(
                 client,
@@ -405,6 +474,8 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                 grid,
                 placed_blocks,
                 remaining_blocks,
+                phase,
+                instruction,
                 block_summaries,
                 placement_focus,
                 density_map,
@@ -485,6 +556,9 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
 
             if done and not env.state.remaining_blocks:
                 success = True
+                break
+            if task_name == "long_horizon" and done:
+                success = not env.state.remaining_blocks
                 break
     finally:
         close = getattr(env, "close", None)

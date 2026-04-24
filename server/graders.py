@@ -105,6 +105,23 @@ def _compute_score(payload: Dict[str, Any], difficulty: str) -> float:
     elif difficulty == "medium":
         raw = (0.50 * completion) + (0.30 * hpwl_quality) + (0.20 * valid_rate)
         bonus = 0.08 if done else 0.0
+    elif difficulty == "long_horizon":
+        phase_names = {str(step.get("phase", "")) for step in trajectory if step.get("phase")}
+        repair_moves = sum(
+            1
+            for step in trajectory
+            if isinstance(step.get("action"), dict) and str(step["action"].get("action_type", "place")).lower() == "move"
+        )
+        phase_coverage = min(1.0, len(phase_names) / 3.0)
+        repair_usage = min(1.0, repair_moves / max(1, total_blocks // 3))
+        raw = (
+            (0.35 * completion)
+            + (0.25 * hpwl_quality)
+            + (0.15 * valid_rate)
+            + (0.15 * phase_coverage)
+            + (0.10 * repair_usage)
+        )
+        bonus = 0.12 if done else 0.0
     else:
         raw = (0.45 * completion) + (0.35 * hpwl_quality) + (0.20 * valid_rate)
         bonus = 0.05 if done else 0.0
@@ -186,10 +203,25 @@ def grade_fixed_obstacles(*args: Any, **kwargs: Any) -> Dict[str, Any]:
     return fixed_obstacles_grader(*args, **kwargs)
 
 
+def long_horizon_grader(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    payload = _parse_payload(*args, **kwargs)
+    score = _compute_score(payload, "long_horizon")
+    return {
+        "score": score,
+        "grader_type": "deterministic",
+        "difficulty": "long_horizon",
+    }
+
+
+def grade_long_horizon(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return long_horizon_grader(*args, **kwargs)
+
+
 GRADERS = {
     "easy": easy_grader,
     "medium": medium_grader,
     "hard": hard_grader,
     "heterogeneous": heterogeneous_grader,
     "fixed_obstacles": fixed_obstacles_grader,
+    "long_horizon": long_horizon_grader,
 }
