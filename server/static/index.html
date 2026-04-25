@@ -331,9 +331,20 @@
         .status-dot {
             width: 12px; height: 12px;
             border-radius: 50%;
+            background: #666;
+            box-shadow: 0 0 5px #333;
+            transition: all 0.3s;
+        }
+
+        .status-dot.online {
             background: #00ff66;
             box-shadow: 0 0 10px #00ff66;
             animation: pulse 2s infinite;
+        }
+
+        .status-dot.error {
+            background: #ff3333;
+            box-shadow: 0 0 10px #ff3333;
         }
         
         @keyframes pulse {
@@ -347,8 +358,8 @@
     <div class="header">
         <h1>[PCB_DESIGN_SYS v2.0]</h1>
         <div class="status-indicator">
-            <div class="status-dot"></div>
-            <span id="statusIndicator">SYSTEM ONLINE // AWAITING COMMAND</span>
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusIndicator">CONNECTING...</span>
         </div>
     </div>
 
@@ -408,15 +419,56 @@
     <script>
         let currentState = null;
         let selectedBlockIndex = 0;
+        let socket = null;
+        
         const canvas = document.getElementById('pcbCanvas');
         const ctx = canvas.getContext('2d');
         const loader = document.getElementById('loader');
         const tooltip = document.getElementById('tooltip');
+        const statusDot = document.getElementById('statusDot');
+        const statusIndicator = document.getElementById('statusIndicator');
         
         let cellSize = 20;
         let padding = 40;
 
-        // Fetch tasks on load
+        // Initialize WebSocket connection
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            socket = new WebSocket(wsUrl);
+            
+            socket.onopen = () => {
+                statusDot.className = 'status-dot online';
+                statusIndicator.textContent = 'SYSTEM ONLINE // CONNECTED';
+                loadTasks();
+            };
+            
+            socket.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'observation') {
+                    updateUI(msg.data);
+                } else if (msg.type === 'error') {
+                    alert('Server Error: ' + msg.data.message);
+                }
+            };
+            
+            socket.onclose = () => {
+                statusDot.className = 'status-dot';
+                statusIndicator.textContent = 'SYSTEM OFFLINE // DISCONNECTED';
+                // Attempt to reconnect after 3 seconds
+                setTimeout(connect, 3000);
+            };
+
+            socket.onerror = (error) => {
+                statusDot.className = 'status-dot error';
+                statusIndicator.textContent = 'CONNECTION ERROR';
+                console.error('WebSocket Error:', error);
+            };
+        }
+
+        connect();
+
         async function loadTasks() {
             try {
                 const res = await fetch('/tasks');
@@ -438,52 +490,44 @@
             }
         }
 
-        loadTasks();
-
-        async function apiCall(endpoint, payload) {
-            loader.style.display = 'block';
-            try {
-                const res = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                loader.style.display = 'none';
-                return data;
-            } catch (e) {
-                loader.style.display = 'none';
-                alert('Connection Error: ' + e.message);
-                console.error(e);
-            }
-        }
-
-        async function resetEnvironment() {
+        function resetEnvironment() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            
             const task = document.getElementById('taskSelect').value;
-            const data = await apiCall('/reset', { task_name: task });
-            if (data) {
-                updateUI(data);
-                document.getElementById('statusIndicator').textContent = "SYSTEM ONLINE // BOARD INITIALIZED";
-            }
+            socket.send(JSON.stringify({
+                type: 'reset',
+                data: { task_name: task }
+            }));
+            
+            loader.style.display = 'block';
+            setTimeout(() => loader.style.display = 'none', 500);
         }
 
-        async function placeChip() {
-            const x = parseInt(document.getElementById('inputX').value) || 0;
-            const y = parseInt(document.getElementById('inputY').value) || 0;
+        function placeChip() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) return;
+            if (!currentState) return;
+
+            const x = parseInt(document.getElementById('inputX').value);
+            const y = parseInt(document.getElementById('inputY').value);
             
-            const action = {
-                x: x,
-                y: y,
-                choosen_block_index: selectedBlockIndex
-            };
-            
-            const data = await apiCall('/step', { action: action });
-            if (data) {
-                updateUI(data);
-                if (data.done) {
-                    document.getElementById('statusIndicator').textContent = "SYSTEM HALTED // ROUTING COMPLETE";
-                }
+            if (isNaN(x) || isNaN(y)) {
+                alert('Please specify valid X and Y coordinates');
+                return;
             }
+            
+            socket.send(JSON.stringify({
+                type: 'step',
+                data: {
+                    action: {
+                        x: x,
+                        y: y,
+                        choosen_block_index: selectedBlockIndex
+                    }
+                }
+            }));
+            
+            loader.style.display = 'block';
+            setTimeout(() => loader.style.display = 'none', 300);
         }
 
         function updateUI(data) {
@@ -497,7 +541,7 @@
             rewardEl.className = 'stat-value ' + (reward >= 0 ? 'good' : 'bad');
             
             document.getElementById('valStep').textContent = obs.phase_step || 0;
-            document.getElementById('valPhase').textContent = obs.phase || 'PLACEMENT';
+            document.getElementById('valPhase').textContent = (obs.phase || 'PLACEMENT').toUpperCase();
             
             let hpwlStr = obs.current_hpwl !== undefined ? obs.current_hpwl.toFixed(2) : '--';
             if (obs.delta_hpwl !== undefined) {
@@ -535,7 +579,6 @@
                 // Visual representation
                 const visual = document.createElement('div');
                 visual.className = 'chip-visual';
-                // Scale so 1 unit = 14px for the queue
                 visual.style.width = (w * 14) + 'px';
                 visual.style.height = (h * 14) + 'px';
                 visual.style.minWidth = '20px';
@@ -546,7 +589,6 @@
                 label.textContent = name;
                 visual.appendChild(label);
                 
-                // Info text
                 const info = document.createElement('div');
                 info.className = 'chip-info';
                 info.innerHTML = `[${i}] ${name}<br>(${w}x${h})`;
@@ -562,14 +604,12 @@
                 container.appendChild(wrapper);
             });
             
-            // ensure valid selection
             if(selectedBlockIndex >= blocks.length) {
                 selectedBlockIndex = 0;
                 if(container.firstChild) container.firstChild.classList.add('selected');
             }
         }
 
-        // Procedural background traces cache
         let bgCanvas = null;
 
         function drawProceduralBackground(width, height) {
@@ -581,17 +621,14 @@
             bgCanvas.height = height;
             const bctx = bgCanvas.getContext('2d');
 
-            // Deep PCB color
             bctx.fillStyle = '#001a0a';
             bctx.fillRect(0, 0, width, height);
 
-            // Draw noise/texture
             bctx.fillStyle = 'rgba(0, 255, 102, 0.02)';
             for(let i=0; i<1000; i++) {
                 bctx.fillRect(Math.random()*width, Math.random()*height, 2, 2);
             }
 
-            // Draw procedural traces
             bctx.lineWidth = 1.5;
             bctx.lineCap = 'round';
             bctx.lineJoin = 'round';
@@ -608,19 +645,18 @@
                 for(let s=0; s<segments; s++) {
                     const dir = Math.floor(Math.random() * 8);
                     const len = Math.random() * 50 + 20;
-                    if(dir===0) tx+=len; // right
-                    else if(dir===1) { tx+=len; ty+=len; } // right-down
-                    else if(dir===2) ty+=len; // down
-                    else if(dir===3) { tx-=len; ty+=len; } // left-down
-                    else if(dir===4) tx-=len; // left
-                    else if(dir===5) { tx-=len; ty-=len; } // left-up
-                    else if(dir===6) ty-=len; // up
-                    else if(dir===7) { tx+=len; ty-=len; } // right-up
+                    if(dir===0) tx+=len;
+                    else if(dir===1) { tx+=len; ty+=len; }
+                    else if(dir===2) ty+=len;
+                    else if(dir===3) { tx-=len; ty+=len; }
+                    else if(dir===4) tx-=len;
+                    else if(dir===5) { tx-=len; ty-=len; }
+                    else if(dir===6) ty-=len;
+                    else if(dir===7) { tx+=len; ty-=len; }
                     bctx.lineTo(tx, ty);
                 }
                 bctx.stroke();
 
-                // Draw Via at the end
                 bctx.fillStyle = '#001a0a';
                 bctx.strokeStyle = '#ffd700';
                 bctx.lineWidth = 1;
@@ -630,7 +666,6 @@
                 bctx.stroke();
             }
 
-            // Draw Silk screen (white component outlines and text)
             bctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
             bctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
             bctx.font = '12px "Share Tech Mono"';
@@ -658,7 +693,6 @@
             const rows = grid.length;
             const cols = grid[0].length;
             
-            // Auto-scale canvas
             const wrapper = document.getElementById('boardWrapper');
             const maxW = wrapper.clientWidth - 60;
             const maxH = wrapper.clientHeight - 60;
@@ -670,11 +704,9 @@
             canvas.width = padding * 2 + cols * cellSize;
             canvas.height = padding * 2 + rows * cellSize;
 
-            // Draw procedural PCB background
             const bg = drawProceduralBackground(canvas.width, canvas.height);
             ctx.drawImage(bg, 0, 0);
 
-            // Draw placement grid as subtle dot markers (no lines)
             ctx.fillStyle = 'rgba(0, 255, 102, 0.4)';
             for (let r = 0; r <= rows; r++) {
                 for (let c = 0; c <= cols; c++) {
@@ -684,59 +716,47 @@
                 }
             }
 
-            // Draw playable area border
-            ctx.strokeStyle = '#ffd700'; // Gold perimeter trace
+            ctx.strokeStyle = '#ffd700';
             ctx.lineWidth = 2;
             ctx.setLineDash([10, 5]);
             ctx.strokeRect(padding, padding, cols*cellSize, rows*cellSize);
             ctx.setLineDash([]);
 
-            // Draw cells
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     const val = grid[r][c];
                     const x = padding + c * cellSize;
-                    // Y axis is inverted in the environment (0 is bottom)
+                    // Y axis is inverted: rows-1-r
                     const y = padding + (rows - 1 - r) * cellSize; 
                     
                     if (val === 0) {
-                        // We do not draw full grid squares for empty space anymore
-                        // Just a tiny via in the center to show it's a valid pad
                         ctx.fillStyle = 'rgba(0, 255, 102, 0.1)';
                         ctx.beginPath();
                         ctx.arc(x + cellSize/2, y + cellSize/2, 1.5, 0, Math.PI*2);
                         ctx.fill();
                     } else {
-                        // Placed Component (Microchip IC)
-                        const hue = (Math.abs(val) * 65) % 360; // Spread out colors
-                        
-                        // Chip body (black silicon package)
+                        const hue = (Math.abs(val) * 65) % 360;
                         ctx.fillStyle = '#111';
                         ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
                         
-                        // Chip brand / identifier text (white silkscreen)
                         ctx.fillStyle = 'rgba(255,255,255,0.8)';
                         ctx.font = `bold ${Math.max(10, cellSize/3)}px "Share Tech Mono"`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText(val, x + cellSize/2, y + cellSize/2);
                         
-                        // Golden/Silver Pins (SMD style)
                         ctx.fillStyle = '#e6c200';
                         const pinW = Math.max(1, Math.floor(cellSize/10));
                         const pinH = Math.max(2, Math.floor(cellSize/8));
                         
-                        // Top pins
                         ctx.fillRect(x + 4, y + 1, pinW, pinH);
                         ctx.fillRect(x + cellSize/2 - pinW/2, y + 1, pinW, pinH);
                         ctx.fillRect(x + cellSize - 4 - pinW, y + 1, pinW, pinH);
                         
-                        // Bottom pins
                         ctx.fillRect(x + 4, y + cellSize - 1 - pinH, pinW, pinH);
                         ctx.fillRect(x + cellSize/2 - pinW/2, y + cellSize - 1 - pinH, pinW, pinH);
                         ctx.fillRect(x + cellSize - 4 - pinW, y + cellSize - 1 - pinH, pinW, pinH);
                         
-                        // Outer glow/border to show it's active
                         ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
                         ctx.lineWidth = 1;
                         ctx.strokeRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
@@ -766,10 +786,8 @@
                 tooltip.style.top = (e.clientY + 15) + 'px';
                 tooltip.textContent = `PAD: [X:${c}, Y:${r}] | SIGNAL: ${grid[r][c]}`;
                 
-                // Redraw to show hover effect
                 drawBoard(grid);
                 
-                // Draw hover outline (targeting reticle)
                 const x = padding + c * cellSize;
                 const y = padding + rRaw * cellSize;
                 
@@ -777,8 +795,6 @@
                 ctx.fillStyle = 'rgba(0, 255, 102, 0.2)';
                 ctx.lineWidth = 2;
                 
-                // Draw a solid hover block instead of just corners
-                // Use the size of the currently selected chip if possible
                 let previewW = 1;
                 let previewH = 1;
                 if (currentState.observation.remaining_blocks && currentState.observation.remaining_blocks[selectedBlockIndex]) {
@@ -786,17 +802,15 @@
                     previewH = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
                 }
                 
-                // Make sure it doesn't overflow grid
+                // Flip preview height calculation for visual correctly
                 if (c + previewW <= cols && rRaw - previewH + 1 >= 0) {
                     const pw = previewW * cellSize;
                     const ph = previewH * cellSize;
-                    // Y grows upwards in grid, but downwards in canvas
                     const previewY = padding + (rRaw - previewH + 1) * cellSize;
                     
                     ctx.fillRect(x, previewY, pw, ph);
                     ctx.strokeRect(x, previewY, pw, ph);
                     
-                    // Draw crosshair center
                     ctx.beginPath();
                     ctx.moveTo(x + pw/2 - 10, previewY + ph/2);
                     ctx.lineTo(x + pw/2 + 10, previewY + ph/2);
@@ -804,7 +818,6 @@
                     ctx.lineTo(x + pw/2, previewY + ph/2 + 10);
                     ctx.stroke();
                 } else {
-                    // Invalid placement outline
                     ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
                     ctx.strokeRect(x, y, cellSize, cellSize);
                 }
@@ -828,11 +841,12 @@
             
             const c = Math.floor((mouseX - padding) / cellSize);
             const rRaw = Math.floor((mouseY - padding) / cellSize);
-            const r = rows - 1 - rRaw;
+            const r = rows - 1 - rRaw; // Y-inverted mapping
             
             if (c >= 0 && c < cols && rRaw >= 0 && rRaw < rows) {
                 document.getElementById('inputX').value = c;
                 document.getElementById('inputY').value = r;
+                // Auto-place on click if desired, but here we just update inputs
             }
         });
         
@@ -843,7 +857,6 @@
             }
         });
 
-        // Initial draw
         drawBoard(null);
 
     </script>
