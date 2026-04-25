@@ -196,48 +196,90 @@
         .chip-list {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 15px;
-            max-height: 200px;
+            gap: 15px;
+            margin-top: 20px;
+            max-height: 350px;
             overflow-y: auto;
-            padding-right: 5px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
         }
         
         .chip-list::-webkit-scrollbar { width: 6px; }
         .chip-list::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
         .chip-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-        .chip-badge {
-            background: var(--chip-bg);
-            border: 1px solid #333;
-            color: var(--chip-text);
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 13px;
+        .chip-item-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
             cursor: pointer;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid transparent;
             transition: all 0.2s;
-            position: relative;
-            overflow: hidden;
         }
-        
-        .chip-badge:hover {
-            border-color: #555;
-            background: #222;
+
+        .chip-item-wrapper:hover {
+            background: rgba(0, 255, 102, 0.05);
+            border-color: rgba(0, 255, 102, 0.2);
         }
-        
-        .chip-badge.selected {
+
+        .chip-item-wrapper.selected {
+            background: rgba(0, 255, 102, 0.1);
             border-color: var(--pcb-trace);
-            color: #fff;
-            background: #002211;
-            box-shadow: 0 0 10px rgba(0,255,102,0.3);
+            box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
         }
-        
-        .chip-badge.selected::before {
+
+        .chip-visual {
+            background-color: #1a1a1a;
+            border: 1px solid #333;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            border-radius: 2px;
+        }
+
+        .chip-visual::before, .chip-visual::after {
             content: '';
             position: absolute;
-            top: 0; left: 0; width: 4px; height: 100%;
-            background: var(--pcb-trace);
+        }
+
+        /* Top and bottom pins */
+        .chip-visual::before {
+            top: -4px; bottom: -4px;
+            left: 4px; right: 4px;
+            background: repeating-linear-gradient(90deg, #b3b3b3 0px, #b3b3b3 2px, transparent 2px, transparent 6px);
+            z-index: -1;
+        }
+
+        /* Left and right pins */
+        .chip-visual::after {
+            left: -4px; right: -4px;
+            top: 4px; bottom: 4px;
+            background: repeating-linear-gradient(0deg, #b3b3b3 0px, #b3b3b3 2px, transparent 2px, transparent 6px);
+            z-index: -1;
+        }
+
+        .chip-label-text {
+            color: #ccc;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            text-align: center;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            z-index: 2;
+        }
+
+        .chip-info {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 11px;
+            color: #00ff66;
+            text-align: center;
         }
 
         .good { color: #00ff66; text-shadow: 0 0 8px rgba(0,255,102,0.5); }
@@ -351,7 +393,7 @@
                 <button id="btnPlace" onclick="placeChip()">Mount Component</button>
                 <div class="stat-label" style="margin-top:15px; border-bottom:1px solid #003311; padding-bottom:5px;">Component Queue</div>
                 <div class="chip-list" id="chipQueue">
-                    <div class="chip-badge selected" data-index="0">0 — RESET</div>
+                    <div class="chip-info">QUEUE EMPTY</div>
                 </div>
             </div>
         </div>
@@ -476,29 +518,48 @@
             container.innerHTML = '';
             
             if (!blocks || blocks.length === 0) {
-                container.innerHTML = '<div class="chip-badge selected" data-index="0">0 — RESET</div>';
+                container.innerHTML = '<div class="chip-info">QUEUE EMPTY</div>';
                 selectedBlockIndex = 0;
                 return;
             }
 
             blocks.forEach((b, i) => {
-                const div = document.createElement('div');
-                div.className = 'chip-badge';
-                if (i === selectedBlockIndex) div.classList.add('selected');
+                const wrapper = document.createElement('div');
+                wrapper.className = 'chip-item-wrapper';
+                if (i === selectedBlockIndex) wrapper.classList.add('selected');
                 
-                let text = `${i} — `;
-                if (typeof b === 'object') {
-                    text += `${b.id || '?'} (${b.width}x${b.height})`;
-                } else {
-                    text += 'BLOCK';
-                }
-                div.textContent = text;
-                div.onclick = () => {
-                    document.querySelectorAll('.chip-badge').forEach(el => el.classList.remove('selected'));
-                    div.classList.add('selected');
+                const w = b.width || 1;
+                const h = b.height || 1;
+                const name = b.id || '?';
+                
+                // Visual representation
+                const visual = document.createElement('div');
+                visual.className = 'chip-visual';
+                // Scale so 1 unit = 14px for the queue
+                visual.style.width = (w * 14) + 'px';
+                visual.style.height = (h * 14) + 'px';
+                visual.style.minWidth = '20px';
+                visual.style.minHeight = '20px';
+                
+                const label = document.createElement('div');
+                label.className = 'chip-label-text';
+                label.textContent = name;
+                visual.appendChild(label);
+                
+                // Info text
+                const info = document.createElement('div');
+                info.className = 'chip-info';
+                info.innerHTML = `[${i}] ${name}<br>(${w}x${h})`;
+                
+                wrapper.appendChild(visual);
+                wrapper.appendChild(info);
+
+                wrapper.onclick = () => {
+                    document.querySelectorAll('.chip-item-wrapper').forEach(el => el.classList.remove('selected'));
+                    wrapper.classList.add('selected');
                     selectedBlockIndex = i;
                 };
-                container.appendChild(div);
+                container.appendChild(wrapper);
             });
             
             // ensure valid selection
@@ -506,6 +567,81 @@
                 selectedBlockIndex = 0;
                 if(container.firstChild) container.firstChild.classList.add('selected');
             }
+        }
+
+        // Procedural background traces cache
+        let bgCanvas = null;
+
+        function drawProceduralBackground(width, height) {
+            if (bgCanvas && bgCanvas.width === width && bgCanvas.height === height) {
+                return bgCanvas;
+            }
+            bgCanvas = document.createElement('canvas');
+            bgCanvas.width = width;
+            bgCanvas.height = height;
+            const bctx = bgCanvas.getContext('2d');
+
+            // Deep PCB color
+            bctx.fillStyle = '#001a0a';
+            bctx.fillRect(0, 0, width, height);
+
+            // Draw noise/texture
+            bctx.fillStyle = 'rgba(0, 255, 102, 0.02)';
+            for(let i=0; i<1000; i++) {
+                bctx.fillRect(Math.random()*width, Math.random()*height, 2, 2);
+            }
+
+            // Draw procedural traces
+            bctx.lineWidth = 1.5;
+            bctx.lineCap = 'round';
+            bctx.lineJoin = 'round';
+            const traceColors = ['rgba(0, 255, 102, 0.15)', 'rgba(0, 255, 102, 0.08)'];
+
+            for(let i=0; i<60; i++) {
+                bctx.strokeStyle = traceColors[i % 2];
+                bctx.beginPath();
+                let tx = Math.random() * width;
+                let ty = Math.random() * height;
+                bctx.moveTo(tx, ty);
+                
+                const segments = Math.floor(Math.random() * 4) + 2;
+                for(let s=0; s<segments; s++) {
+                    const dir = Math.floor(Math.random() * 8);
+                    const len = Math.random() * 50 + 20;
+                    if(dir===0) tx+=len; // right
+                    else if(dir===1) { tx+=len; ty+=len; } // right-down
+                    else if(dir===2) ty+=len; // down
+                    else if(dir===3) { tx-=len; ty+=len; } // left-down
+                    else if(dir===4) tx-=len; // left
+                    else if(dir===5) { tx-=len; ty-=len; } // left-up
+                    else if(dir===6) ty-=len; // up
+                    else if(dir===7) { tx+=len; ty-=len; } // right-up
+                    bctx.lineTo(tx, ty);
+                }
+                bctx.stroke();
+
+                // Draw Via at the end
+                bctx.fillStyle = '#001a0a';
+                bctx.strokeStyle = '#ffd700';
+                bctx.lineWidth = 1;
+                bctx.beginPath();
+                bctx.arc(tx, ty, 3, 0, Math.PI*2);
+                bctx.fill();
+                bctx.stroke();
+            }
+
+            // Draw Silk screen (white component outlines and text)
+            bctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            bctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            bctx.font = '12px "Share Tech Mono"';
+            for(let i=0; i<15; i++) {
+                let sx = Math.random() * width;
+                let sy = Math.random() * height;
+                bctx.strokeRect(sx, sy, Math.random()*40+20, Math.random()*40+20);
+                bctx.fillText(`C${Math.floor(Math.random()*100)}`, sx+2, sy-4);
+            }
+
+            return bgCanvas;
         }
 
         function drawBoard(grid) {
@@ -534,28 +670,26 @@
             canvas.width = padding * 2 + cols * cellSize;
             canvas.height = padding * 2 + rows * cellSize;
 
-            // Base PCB color
-            ctx.fillStyle = '#002b12';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Draw procedural PCB background
+            const bg = drawProceduralBackground(canvas.width, canvas.height);
+            ctx.drawImage(bg, 0, 0);
 
-            // Draw copper grid traces
-            ctx.strokeStyle = 'rgba(0, 255, 102, 0.15)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            for (let x = 0; x <= cols; x++) {
-                ctx.moveTo(padding + x * cellSize, padding);
-                ctx.lineTo(padding + x * cellSize, padding + rows * cellSize);
+            // Draw placement grid as subtle dot markers (no lines)
+            ctx.fillStyle = 'rgba(0, 255, 102, 0.4)';
+            for (let r = 0; r <= rows; r++) {
+                for (let c = 0; c <= cols; c++) {
+                    const x = padding + c * cellSize;
+                    const y = padding + r * cellSize;
+                    ctx.fillRect(x - 1, y - 1, 2, 2);
+                }
             }
-            for (let y = 0; y <= rows; y++) {
-                ctx.moveTo(padding, padding + y * cellSize);
-                ctx.lineTo(padding + cols * cellSize, padding + y * cellSize);
-            }
-            ctx.stroke();
 
-            // Draw thicker border around the playable area
-            ctx.strokeStyle = '#005522';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(padding-1, padding-1, cols*cellSize+2, rows*cellSize+2);
+            // Draw playable area border
+            ctx.strokeStyle = '#ffd700'; // Gold perimeter trace
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 5]);
+            ctx.strokeRect(padding, padding, cols*cellSize, rows*cellSize);
+            ctx.setLineDash([]);
 
             // Draw cells
             for (let r = 0; r < rows; r++) {
@@ -566,11 +700,9 @@
                     const y = padding + (rows - 1 - r) * cellSize; 
                     
                     if (val === 0) {
-                        // Empty pad
-                        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-                        ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
-                        // small trace point (via)
-                        ctx.fillStyle = 'rgba(0, 255, 102, 0.3)';
+                        // We do not draw full grid squares for empty space anymore
+                        // Just a tiny via in the center to show it's a valid pad
+                        ctx.fillStyle = 'rgba(0, 255, 102, 0.1)';
                         ctx.beginPath();
                         ctx.arc(x + cellSize/2, y + cellSize/2, 1.5, 0, Math.PI*2);
                         ctx.fill();
@@ -582,9 +714,12 @@
                         ctx.fillStyle = '#111';
                         ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
                         
-                        // Chip brand / identifier patch
-                        ctx.fillStyle = `hsl(${hue}, 80%, 35%)`;
-                        ctx.fillRect(x + 5, y + 5, cellSize - 10, cellSize - 10);
+                        // Chip brand / identifier text (white silkscreen)
+                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                        ctx.font = `bold ${Math.max(10, cellSize/3)}px "Share Tech Mono"`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(val, x + cellSize/2, y + cellSize/2);
                         
                         // Golden/Silver Pins (SMD style)
                         ctx.fillStyle = '#e6c200';
@@ -638,18 +773,41 @@
                 const x = padding + c * cellSize;
                 const y = padding + rRaw * cellSize;
                 
-                ctx.strokeStyle = '#00ff66';
+                ctx.strokeStyle = 'rgba(0, 255, 102, 0.8)';
+                ctx.fillStyle = 'rgba(0, 255, 102, 0.2)';
                 ctx.lineWidth = 2;
-                ctx.beginPath();
-                // Top left corner
-                ctx.moveTo(x, y + 5); ctx.lineTo(x, y); ctx.lineTo(x + 5, y);
-                // Top right corner
-                ctx.moveTo(x + cellSize - 5, y); ctx.lineTo(x + cellSize, y); ctx.lineTo(x + cellSize, y + 5);
-                // Bottom right corner
-                ctx.moveTo(x + cellSize, y + cellSize - 5); ctx.lineTo(x + cellSize, y + cellSize); ctx.lineTo(x + cellSize - 5, y + cellSize);
-                // Bottom left corner
-                ctx.moveTo(x + 5, y + cellSize); ctx.lineTo(x, y + cellSize); ctx.lineTo(x, y + cellSize - 5);
-                ctx.stroke();
+                
+                // Draw a solid hover block instead of just corners
+                // Use the size of the currently selected chip if possible
+                let previewW = 1;
+                let previewH = 1;
+                if (currentState.observation.remaining_blocks && currentState.observation.remaining_blocks[selectedBlockIndex]) {
+                    previewW = currentState.observation.remaining_blocks[selectedBlockIndex].width || 1;
+                    previewH = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
+                }
+                
+                // Make sure it doesn't overflow grid
+                if (c + previewW <= cols && rRaw - previewH + 1 >= 0) {
+                    const pw = previewW * cellSize;
+                    const ph = previewH * cellSize;
+                    // Y grows upwards in grid, but downwards in canvas
+                    const previewY = padding + (rRaw - previewH + 1) * cellSize;
+                    
+                    ctx.fillRect(x, previewY, pw, ph);
+                    ctx.strokeRect(x, previewY, pw, ph);
+                    
+                    // Draw crosshair center
+                    ctx.beginPath();
+                    ctx.moveTo(x + pw/2 - 10, previewY + ph/2);
+                    ctx.lineTo(x + pw/2 + 10, previewY + ph/2);
+                    ctx.moveTo(x + pw/2, previewY + ph/2 - 10);
+                    ctx.lineTo(x + pw/2, previewY + ph/2 + 10);
+                    ctx.stroke();
+                } else {
+                    // Invalid placement outline
+                    ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
+                    ctx.strokeRect(x, y, cellSize, cellSize);
+                }
                 
             } else {
                 tooltip.style.display = 'none';
