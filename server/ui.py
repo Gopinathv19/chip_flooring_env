@@ -8,143 +8,203 @@ import gradio as gr
 from PIL import Image, ImageDraw
 
 _CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-:root{
-  --bg:#f4efe7;
-  --bg2:#ece3d6;
-  --panel:#fffaf2;
-  --panel2:#ffffff;
-  --stroke:#d4c6b2;
-  --muted:#6f6254;
-  --text:#2c241b;
-  --accent:#106c56;
-  --accent2:#0a503f;
-  --chip:#0d5f4c;
-  --good:#0b7d44;
-  --bad:#b42318;
-
+:root {
+  --bg-dark: #0f172a;
+  --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  --panel-bg: rgba(30, 41, 59, 0.4);
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent: #3b82f6;
+  --accent-glow: rgba(59, 130, 246, 0.5);
+  --success: #10b981;
+  --danger: #ef4444;
+  --card-bg: rgba(15, 23, 42, 0.4);
 }
 
-footer{display:none !important;}
-.gradio-container{
-  background:
-    radial-gradient(1200px 680px at 15% -10%, #fef9ee 18%, transparent 62%),
-    radial-gradient(860px 520px at 90% 0%, #e7f2ec 10%, transparent 58%),
-    linear-gradient(170deg, var(--bg), var(--bg2)) !important;
-  font-family:"Space Grotesk", "Segoe UI", sans-serif !important;
+footer { display: none !important; }
+.gradio-container {
+  background: var(--bg-gradient) !important;
+  background-attachment: fixed !important;
+  font-family: "Outfit", system-ui, -apple-system, sans-serif !important;
+  color: var(--text-main) !important;
+  min-height: 100vh;
 }
-.gradio-container *{box-sizing:border-box;}
-.wrap{
-  max-width:1420px;
-  margin:0 auto;
-  background:rgba(255,255,255,.58);
-  backdrop-filter: blur(5px);
-  border:1px solid var(--stroke);
-  border-radius:24px;
-  padding:14px;
-  box-shadow:0 20px 44px rgba(62, 47, 30, .08);
+.gradio-container * { box-sizing: border-box; }
+.wrap {
+  max-width: 1440px;
+  margin: 30px auto;
+  background: var(--panel-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--panel-border);
+  border-radius: 32px;
+  padding: 32px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
 }
-.topbar{
-  display:flex;
-  align-items:stretch;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:12px;
+.topbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 32px;
 }
-.hero{
-  border:1px solid var(--stroke);
-  border-radius:18px;
-  background:linear-gradient(140deg, #fffaf2, #f7f1e8);
-  padding:14px;
+.hero {
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+  padding: 32px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  transition: transform 0.3s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.title{
-  color:var(--text);
-  font-weight:700;
-  font-size:1.45rem;
-  letter-spacing:.01em;
-  line-height:1.18;
+.hero:hover { transform: translateY(-2px); }
+.title {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 2.2rem;
+  letter-spacing: -0.02em;
+  background: linear-gradient(to right, #60a5fa, #a78bfa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 12px;
+  line-height: 1.1;
 }
-.subtitle{
-  color:var(--muted);
-  font-size:.86rem;
-  margin-top:6px;
-  line-height:1.35;
+.subtitle {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
-.mono{font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;}
-.panel,.boardPanel{
-  border:1px solid var(--stroke);
-  border-radius:18px;
-  background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.84)), var(--panel);
-  padding:12px;
+.mono { font-family: "JetBrains Mono", monospace; }
+.panel, .boardPanel {
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  background: var(--card-bg);
+  padding: 28px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3);
 }
-.boardPanel{
-  background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.86)), var(--panel2);
-  min-height:760px;
+.boardPanel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 720px;
+  background: radial-gradient(circle at center, rgba(30,41,59,0.5) 0%, rgba(15,23,42,0.8) 100%);
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
 }
-.stats{
-  display:grid;
-  grid-template-columns:repeat(3, minmax(136px, 1fr));
-  gap:8px;
+.boardPanel::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(circle at center, rgba(59,130,246,0.05) 0%, transparent 50%);
+  animation: rotate 30s linear infinite;
+  pointer-events: none;
 }
-.stat{
-  min-width:0;
-  border:1px solid var(--stroke);
-  border-radius:12px;
-  padding:8px 10px;
-  background:linear-gradient(180deg, #ffffff, #fbf5eb);
-  box-shadow:0 2px 10px rgba(35, 28, 20, .05);
+@keyframes rotate { 100% { transform: rotate(360deg); } }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  height: 100%;
 }
-.k{color:var(--muted); font-size:.67rem; text-transform:uppercase; letter-spacing:.1em;}
-.v{color:var(--text); font-size:1.05rem; font-weight:700; margin-top:2px; line-height:1.2;}
-.vGood{color:var(--good);}
-.vBad{color:var(--bad);}
-.hint{color:var(--muted); font-size:.8rem; line-height:1.45; margin-top:8px;}
-.chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
-.chip{
-  border:1px solid rgba(13,95,76,.22);
-  background:rgba(13,95,76,.08);
-  color:var(--chip);
-  border-radius:999px;
-  padding:4px 8px;
-  font-size:.72rem;
-  line-height:1;
-  font-family:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+.stat {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 20px;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.section{margin-top:8px;}
-.boardHint{
-  border:1px dashed var(--stroke);
-  border-radius:12px;
-  padding:8px 10px;
-  background:#fffdf8;
+.stat:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255,255,255,0.15);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4);
 }
-.ctrlTitle{
-  margin:0 0 10px 0;
-  font-size:1.03rem;
-  color:var(--text);
+.k { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; font-weight: 600; }
+.v { color: var(--text-main); font-size: 1.4rem; font-weight: 700; line-height: 1.2; }
+.vGood { color: var(--success); text-shadow: 0 0 15px rgba(16,185,129,0.4); }
+.vBad { color: var(--danger); text-shadow: 0 0 15px rgba(239,68,68,0.4); }
+.hint { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin-top: 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.chip {
+  border: 1px solid rgba(96,165,250,0.3);
+  background: rgba(96,165,250,0.08);
+  color: #93c5fd;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-family: "JetBrains Mono", monospace;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
-.gradio-container .gr-form, .gradio-container .gr-box{border-color:var(--stroke) !important;}
-.gradio-container .gr-button-primary{
-  background:linear-gradient(135deg, var(--accent), var(--accent2)) !important;
-  border:0 !important;
+.chip:hover {
+  background: rgba(96,165,250,0.18);
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(96,165,250,0.2);
 }
-.gradio-container .gr-button-secondary{
-  background:#efe4d6 !important;
-  color:var(--text) !important;
-  border:1px solid var(--stroke) !important;
+.section { margin-top: 32px; color: #fff; font-weight: 600; font-size: 1.15rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 20px; }
+.boardHint {
+  border: 1px dashed rgba(255,255,255,0.2);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(0,0,0,0.2);
+  text-align: center;
+  margin-top: 20px;
+  width: 100%;
 }
-.gradio-container .gr-input, .gradio-container .gr-dropdown, .gradio-container .gr-number{
-  border-color:var(--stroke) !important;
+.ctrlTitle { margin: 0 0 20px 0; font-size: 1.4rem; color: #fff; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+
+/* Gradio Component Overrides */
+div.form, div.box, .gr-form, .gr-box { background: transparent !important; border: none !important; }
+.gr-button-primary {
+  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
+  border: 0 !important;
+  color: #fff !important;
+  border-radius: 14px !important;
+  font-weight: 600 !important;
+  padding: 12px 20px !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 15px rgba(59,130,246,0.3) !important;
 }
-.quickstart{
-  margin-top:10px;
-  border:1px solid var(--stroke);
-  border-radius:14px;
-  background:rgba(255,255,255,.8);
+.gr-button-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 25px rgba(59,130,246,0.5) !important;
+}
+.gr-button-secondary {
+  background: rgba(255,255,255,0.05) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 14px !important;
+  font-weight: 600 !important;
+  padding: 12px 20px !important;
+  transition: all 0.3s ease !important;
+}
+.gr-button-secondary:hover {
+  background: rgba(255,255,255,0.1) !important;
+  border-color: rgba(255,255,255,0.25) !important;
+}
+.quickstart {
+  margin-top: 32px;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  background: var(--card-bg);
+  overflow: hidden;
 }
 @media (max-width: 1150px){
-  .stats{grid-template-columns:repeat(2, minmax(130px,1fr));}
-  .boardPanel{min-height:620px;}
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .topbar { flex-direction: column; }
+  .boardPanel { min-height: 600px; }
 }
 """
 
@@ -275,30 +335,30 @@ def _render_board(
     pad: int,
 ) -> Image.Image:
     if not grid:
-        img = Image.new("RGB", (960, 620), (6, 16, 27))
+        img = Image.new("RGB", (960, 620), (15, 23, 42))
         d = ImageDraw.Draw(img)
-        d.rounded_rectangle((18, 18, 942, 602), radius=18, outline=(26, 38, 60), width=2, fill=(10, 18, 30))
-        d.text((36, 40), "Reset the environment to load the board.", fill=(128, 145, 170))
-        d.text((36, 66), "Pick a task, then place blocks by choosing coordinates and a block id.", fill=(90, 110, 130))
+        d.rounded_rectangle((18, 18, 942, 602), radius=24, outline=(51, 65, 85), width=2, fill=(30, 41, 59))
+        d.text((36, 40), "Reset the environment to load the board.", fill=(148, 163, 184))
+        d.text((36, 66), "Pick a task, then place blocks by choosing coordinates and a block id.", fill=(100, 116, 139))
         return img
 
     n, m = _grid_shape(grid)
     w = pad * 2 + m * cell_px
     h = pad * 2 + n * cell_px
-    img = Image.new("RGB", (w, h), (6, 16, 27))
+    img = Image.new("RGB", (w, h), (15, 23, 42))
     d = ImageDraw.Draw(img, "RGBA")
 
-    d.rounded_rectangle((4, 4, w - 4, h - 4), radius=16, fill=(10, 18, 30), outline=(26, 38, 60), width=1)
+    d.rounded_rectangle((4, 4, w - 4, h - 4), radius=20, fill=(30, 41, 59, 230), outline=(51, 65, 85, 255), width=2)
 
     if reward:
         strength = max(0.0, min(1.0, (1.0 - blend) * 0.55))
         if strength > 0:
-            color = (28, 150, 100) if reward >= 0 else (160, 55, 60)
-            overlay = Image.new("RGBA", (w, h), (*color, int(42 * strength)))
+            color = (16, 185, 129) if reward >= 0 else (239, 68, 68)
+            overlay = Image.new("RGBA", (w, h), (*color, int(60 * strength)))
             img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
             d = ImageDraw.Draw(img, "RGBA")
 
-    line = (24, 36, 56)
+    line = (51, 65, 85)
     for x in range(m + 1):
         xx = pad + x * cell_px
         d.line((xx, pad, xx, pad + n * cell_px), fill=line, width=1)
@@ -321,11 +381,11 @@ def _render_board(
             y1 = y0 + cell_px - 2
 
             if cur == 0:
-                base = (10, 18, 30)
+                base = (15, 23, 42)
                 if reset_fade > 0:
                     f = max(0.0, min(1.0, reset_fade))
                     base = (int(base[0] * (1 - f)), int(base[1] * (1 - f)), int(base[2] * (1 - f)))
-                d.rectangle((x0, y0, x1, y1), fill=base)
+                d.rounded_rectangle((x0, y0, x1, y1), radius=4, fill=base)
                 continue
 
             is_new = prev == 0 and cur != 0
@@ -344,15 +404,15 @@ def _render_board(
                 x0r, y0r, x1r, y1r = x0, y0, x1, y1
 
             base = _block_color(cur)
-            shell = (base[0] // 4, base[1] // 4, base[2] // 4)
+            shell = (base[0] // 2, base[1] // 2, base[2] // 2)
             core = (
-                min(255, int(base[0] * (0.74 + 0.26 * blend))),
-                min(255, int(base[1] * (0.74 + 0.26 * blend))),
-                min(255, int(base[2] * (0.74 + 0.26 * blend))),
+                min(255, int(base[0] * (0.9 + 0.3 * blend))),
+                min(255, int(base[1] * (0.9 + 0.3 * blend))),
+                min(255, int(base[2] * (0.9 + 0.3 * blend))),
             )
             d.rounded_rectangle((x0r, y0r, x1r, y1r), radius=6, fill=shell)
-            d.rounded_rectangle((x0r + 3, y0r + 3, x1r - 3, y1r - 3), radius=5, fill=core)
-            d.rounded_rectangle((x0r, y0r, x1r, y1r), radius=6, outline=(0, 216, 255), width=1)
+            d.rounded_rectangle((x0r + 2, y0r + 2, x1r - 2, y1r - 2), radius=4, fill=core)
+            d.rounded_rectangle((x0r, y0r, x1r, y1r), radius=6, outline=(255, 255, 255, 80), width=1)
 
     if preview_xy is not None:
         px, py = preview_xy
@@ -361,8 +421,8 @@ def _render_board(
             y0 = pad + (n - 1 - py) * cell_px + 1
             x1 = x0 + cell_px - 2
             y1 = y0 + cell_px - 2
-            d.rounded_rectangle((x0, y0, x1, y1), radius=6, outline=(0, 216, 255), width=2)
-            d.rounded_rectangle((x0 + 2, y0 + 2, x1 - 2, y1 - 2), radius=5, outline=(0, 216, 255), width=1)
+            d.rounded_rectangle((x0, y0, x1, y1), radius=6, outline=(96, 165, 250), width=2)
+            d.rounded_rectangle((x0 + 2, y0 + 2, x1 - 2, y1 - 2), radius=4, outline=(147, 197, 253), width=1)
 
     if placed_xy is not None:
         ax, ay = placed_xy
@@ -372,7 +432,7 @@ def _render_board(
             x1 = x0 + cell_px - 2
             y1 = y0 + cell_px - 2
             for k, a in [(0, 180), (3, 90), (6, 40)]:
-                d.rounded_rectangle((x0 - k, y0 - k, x1 + k, y1 + k), radius=6 + k, outline=(0, 216, 255, a), width=2)
+                d.rounded_rectangle((x0 - k, y0 - k, x1 + k, y1 + k), radius=6 + k, outline=(96, 165, 250, a), width=2)
 
     return img
 
@@ -480,8 +540,7 @@ def build_clean_gradio_ui(
             "Press Reset to start a fresh episode, then choose coordinates and place one block per step."
             "</div>"
         )
-#helloworld
-    with gr.Blocks(title=f"{title} — Clean UI", css=_CSS) as demo:
+    with gr.Blocks(title=title, css=_CSS) as demo:
         s_state = gr.State(dict(state0))
 
         with gr.Group(elem_classes=["wrap"]):
@@ -490,7 +549,7 @@ def build_clean_gradio_ui(
                     gr.HTML(
                         "<div class='hero'>"
                         f"<div class='title'>{title}</div>"
-                        "<div class='subtitle'>Interactive chip placement UI with guided controls and clean visual feedback. Raw observation JSON is hidden for easier human operation.</div>"
+                        "<div class='subtitle'>Interactive chip placement UI with guided controls and real-time visual feedback. Modern aesthetics.</div>"
                         "</div>"
                     )
                 with gr.Column(scale=7):

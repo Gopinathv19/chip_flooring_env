@@ -50,6 +50,18 @@ except ImportError:
 from fastapi import Body
 
 
+import gradio as gr
+_original_tabbed_interface = gr.TabbedInterface
+
+def _single_tab_interface(interface_list, tab_names, **kwargs):
+    # interface_list[0] is the default Playground
+    # interface_list[1] is the Custom UI (gradio_builder output)
+    if len(interface_list) > 1:
+        return interface_list[1]
+    return interface_list[0]
+
+gr.TabbedInterface = _single_tab_interface
+
 # Create the app with web interface and README integration
 app = create_app(
     ChipFlooringEnvironment,
@@ -59,6 +71,8 @@ app = create_app(
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
     gradio_builder=build_clean_gradio_ui,
 )
+
+gr.TabbedInterface = _original_tabbed_interface
 
 _TASK_GRADER_SPECS: dict[str, str] = {
     "easy": "server.graders.grade_easy",
