@@ -6,7 +6,10 @@ chip_flooring_env/__pycache__/
 chip_flooring_env/server/__pycache__/
 .venv/
 
-__pycache__/
+
+server/__pycache__/openenv_chip_flooring_env_environment.pyc
+
+server/__pycache__/
 *.pyc
 .env
 oenv/
