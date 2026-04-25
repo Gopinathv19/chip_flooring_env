@@ -136,6 +136,13 @@
             font-size: 15px;
         }
 
+        input[readonly] {
+            background: rgba(0, 30, 10, 0.3);
+            border-color: #003311;
+            color: #00aa44;
+            cursor: default;
+        }
+
         select:focus, input:focus {
             outline: none;
             border-color: var(--pcb-trace);
@@ -378,7 +385,7 @@
                 <div class="stat-grid">
                     <div class="stat-box">
                         <div class="stat-label">Reward</div>
-                        <div class="stat-value" id="valReward">0.000</div>
+                        <div class="stat-value" id="valReward">0.0000</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-label">Step</div>
@@ -398,8 +405,8 @@
             <div class="panel">
                 <h2>Component Placement</h2>
                 <div class="coordinates">
-                    <input type="number" id="inputX" placeholder="COORD X" min="0">
-                    <input type="number" id="inputY" placeholder="COORD Y" min="0">
+                    <input type="text" id="inputX" placeholder="COORD X" readonly>
+                    <input type="text" id="inputY" placeholder="COORD Y" readonly>
                 </div>
                 <button id="btnPlace" onclick="placeChip()">Mount Component</button>
                 <div class="stat-label" style="margin-top:15px; border-bottom:1px solid #003311; padding-bottom:5px;">Component Queue</div>
@@ -431,7 +438,6 @@
         let cellSize = 20;
         let padding = 40;
 
-        // Initialize WebSocket connection
         function connect() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -456,14 +462,12 @@
             socket.onclose = () => {
                 statusDot.className = 'status-dot';
                 statusIndicator.textContent = 'SYSTEM OFFLINE // DISCONNECTED';
-                // Attempt to reconnect after 3 seconds
                 setTimeout(connect, 3000);
             };
 
             socket.onerror = (error) => {
                 statusDot.className = 'status-dot error';
                 statusIndicator.textContent = 'CONNECTION ERROR';
-                console.error('WebSocket Error:', error);
             };
         }
 
@@ -485,20 +489,17 @@
                     });
                 }
             } catch(e) {
-                console.log("Tasks endpoint failed, using default");
                 document.getElementById('taskSelect').innerHTML = '<option value="hard_standard_long_horizon">HARD STANDARD LONG HORIZON</option>';
             }
         }
 
         function resetEnvironment() {
             if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            
             const task = document.getElementById('taskSelect').value;
             socket.send(JSON.stringify({
                 type: 'reset',
                 data: { task_name: task }
             }));
-            
             loader.style.display = 'block';
             setTimeout(() => loader.style.display = 'none', 500);
         }
@@ -511,7 +512,7 @@
             const y = parseInt(document.getElementById('inputY').value);
             
             if (isNaN(x) || isNaN(y)) {
-                alert('Please specify valid X and Y coordinates');
+                alert('Please select a placement point on the board first.');
                 return;
             }
             
@@ -532,7 +533,6 @@
             currentState = data;
             const obs = data.observation || {};
             
-            // Update stats
             const reward = data.reward || 0;
             const rewardEl = document.getElementById('valReward');
             rewardEl.textContent = reward.toFixed(4);
@@ -548,10 +548,7 @@
             }
             document.getElementById('valHpwl').textContent = hpwlStr;
 
-            // Update remaining blocks
             updateChips(obs.remaining_blocks);
-
-            // Draw Board
             drawBoard(obs.canva_space);
         }
 
@@ -574,7 +571,6 @@
                 const h = b.height || 1;
                 const name = b.id || '?';
                 
-                // Visual representation
                 const visual = document.createElement('div');
                 visual.className = 'chip-visual';
                 visual.style.width = (w * 14) + 'px';
@@ -664,14 +660,14 @@
                 bctx.stroke();
             }
 
-            bctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-            bctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            bctx.font = '12px "Share Tech Mono"';
+            bctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            bctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+            bctx.font = '10px "Share Tech Mono"';
             for(let i=0; i<15; i++) {
                 let sx = Math.random() * width;
                 let sy = Math.random() * height;
                 bctx.strokeRect(sx, sy, Math.random()*40+20, Math.random()*40+20);
-                bctx.fillText(`C${Math.floor(Math.random()*100)}`, sx+2, sy-4);
+                bctx.fillText(`U${Math.floor(Math.random()*100)}`, sx+2, sy-4);
             }
 
             return bgCanvas;
@@ -696,8 +692,8 @@
             const maxH = wrapper.clientHeight - 60;
             
             cellSize = Math.min(Math.floor((maxW - padding*2) / cols), Math.floor((maxH - padding*2) / rows));
-            if (cellSize < 12) cellSize = 12;
-            if (cellSize > 45) cellSize = 45;
+            if (cellSize < 10) cellSize = 10;
+            if (cellSize > 40) cellSize = 40;
 
             canvas.width = padding * 2 + cols * cellSize;
             canvas.height = padding * 2 + rows * cellSize;
@@ -705,15 +701,15 @@
             const bg = drawProceduralBackground(canvas.width, canvas.height);
             ctx.drawImage(bg, 0, 0);
 
-            ctx.fillStyle = 'rgba(0, 255, 102, 0.4)';
+            // Draw placement grid dots
+            ctx.fillStyle = 'rgba(0, 255, 102, 0.3)';
             for (let r = 0; r <= rows; r++) {
                 for (let c = 0; c <= cols; c++) {
-                    const x = padding + c * cellSize;
-                    const y = padding + r * cellSize;
-                    ctx.fillRect(x - 1, y - 1, 2, 2);
+                    ctx.fillRect(padding + c * cellSize - 1, padding + r * cellSize - 1, 2, 2);
                 }
             }
 
+            // Board boundary
             ctx.strokeStyle = '#ffd700';
             ctx.lineWidth = 2;
             ctx.setLineDash([10, 5]);
@@ -723,52 +719,36 @@
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
                     const val = grid[r][c];
-                    const x = padding + c * cellSize;
-                    // Y axis is inverted: rows-1-r
-                    const y = padding + (rows - 1 - r) * cellSize; 
-                    
-                    if (val === 0) {
-                        ctx.fillStyle = 'rgba(0, 255, 102, 0.1)';
-                        ctx.beginPath();
-                        ctx.arc(x + cellSize/2, y + cellSize/2, 1.5, 0, Math.PI*2);
-                        ctx.fill();
-                    } else {
-                        const hue = (Math.abs(val) * 65) % 360;
-                        ctx.fillStyle = '#111';
-                        ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+                    if (val !== 0) {
+                        const x = padding + c * cellSize;
+                        const y = padding + (rows - 1 - r) * cellSize; 
                         
-                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                        ctx.font = `bold ${Math.max(10, cellSize/3)}px "Share Tech Mono"`;
+                        ctx.fillStyle = '#111';
+                        ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+                        
+                        ctx.strokeStyle = 'rgba(0, 255, 102, 0.5)';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+
+                        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                        ctx.font = `${Math.floor(cellSize/2)}px "Share Tech Mono"`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText(val, x + cellSize/2, y + cellSize/2);
-                        
-                        ctx.fillStyle = '#e6c200';
-                        const pinW = Math.max(1, Math.floor(cellSize/10));
-                        const pinH = Math.max(2, Math.floor(cellSize/8));
-                        
-                        ctx.fillRect(x + 4, y + 1, pinW, pinH);
-                        ctx.fillRect(x + cellSize/2 - pinW/2, y + 1, pinW, pinH);
-                        ctx.fillRect(x + cellSize - 4 - pinW, y + 1, pinW, pinH);
-                        
-                        ctx.fillRect(x + 4, y + cellSize - 1 - pinH, pinW, pinH);
-                        ctx.fillRect(x + cellSize/2 - pinW/2, y + cellSize - 1 - pinH, pinW, pinH);
-                        ctx.fillRect(x + cellSize - 4 - pinW, y + cellSize - 1 - pinH, pinW, pinH);
-                        
-                        ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
                     }
                 }
             }
         }
 
-        canvas.addEventListener('mousemove', (e) => {
-            if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
-            
+        // Precise coordinate translation
+        function getGridCoords(e) {
             const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            // Important: Handle border offset (6px) and high-DPI scaling
+            const scaleX = canvas.width / (rect.width - 12); // Subtract 6+6 border
+            const scaleY = canvas.height / (rect.height - 12);
+            
+            const mouseX = (e.clientX - (rect.left + 6)) * scaleX;
+            const mouseY = (e.clientY - (rect.top + 6)) * scaleY;
             
             const grid = currentState.observation.canva_space;
             const rows = grid.length;
@@ -778,73 +758,69 @@
             const rRaw = Math.floor((mouseY - padding) / cellSize);
             const r = rows - 1 - rRaw;
             
+            return { c, r, rRaw, mouseX, mouseY, rows, cols };
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
+            
+            const { c, r, rRaw, rows, cols } = getGridCoords(e);
+            
             if (c >= 0 && c < cols && rRaw >= 0 && rRaw < rows) {
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 15) + 'px';
                 tooltip.style.top = (e.clientY + 15) + 'px';
-                tooltip.textContent = `PAD: [X:${c}, Y:${r}] | SIGNAL: ${grid[r][c]}`;
+                tooltip.textContent = `PAD [X:${c}, Y:${r}] | SIGNAL: ${currentState.observation.canva_space[r][c]}`;
                 
-                drawBoard(grid);
+                drawBoard(currentState.observation.canva_space);
                 
-                const x = padding + c * cellSize;
-                const y = padding + rRaw * cellSize;
-                
-                ctx.strokeStyle = 'rgba(0, 255, 102, 0.8)';
-                ctx.fillStyle = 'rgba(0, 255, 102, 0.2)';
-                ctx.lineWidth = 2;
-                
-                let previewW = 1;
-                let previewH = 1;
+                // Draw Preview Reticle
+                let pw_count = 1;
+                let ph_count = 1;
                 if (currentState.observation.remaining_blocks && currentState.observation.remaining_blocks[selectedBlockIndex]) {
-                    previewW = currentState.observation.remaining_blocks[selectedBlockIndex].width || 1;
-                    previewH = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
+                    pw_count = currentState.observation.remaining_blocks[selectedBlockIndex].width || 1;
+                    ph_count = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
                 }
                 
-                // Flip preview height calculation for visual correctly
-                if (c + previewW <= cols && rRaw - previewH + 1 >= 0) {
-                    const pw = previewW * cellSize;
-                    const ph = previewH * cellSize;
-                    const previewY = padding + (rRaw - previewH + 1) * cellSize;
+                // In Chip Flooring, (x,y) is usually the bottom-left.
+                // We want to show a preview box where the click cell is the BOTTOM-LEFT.
+                const x = padding + c * cellSize;
+                const top_rRaw = rRaw - ph_count + 1;
+                const y = padding + top_rRaw * cellSize;
+                
+                if (c + pw_count <= cols && top_rRaw >= 0) {
+                    ctx.fillStyle = 'rgba(0, 255, 102, 0.2)';
+                    ctx.strokeStyle = '#00ff66';
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(x, y, pw_count * cellSize, ph_count * cellSize);
+                    ctx.strokeRect(x, y, pw_count * cellSize, ph_count * cellSize);
                     
-                    ctx.fillRect(x, previewY, pw, ph);
-                    ctx.strokeRect(x, previewY, pw, ph);
-                    
+                    // Crosshair at the actual anchor (the clicked cell)
+                    const anchorY = padding + rRaw * cellSize;
                     ctx.beginPath();
-                    ctx.moveTo(x + pw/2 - 10, previewY + ph/2);
-                    ctx.lineTo(x + pw/2 + 10, previewY + ph/2);
-                    ctx.moveTo(x + pw/2, previewY + ph/2 - 10);
-                    ctx.lineTo(x + pw/2, previewY + ph/2 + 10);
+                    ctx.strokeStyle = '#ffd700';
+                    ctx.moveTo(x + cellSize/2 - 5, anchorY + cellSize/2);
+                    ctx.lineTo(x + cellSize/2 + 5, anchorY + cellSize/2);
+                    ctx.moveTo(x + cellSize/2, anchorY + cellSize/2 - 5);
+                    ctx.lineTo(x + cellSize/2, anchorY + cellSize/2 + 5);
                     ctx.stroke();
                 } else {
                     ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
-                    ctx.strokeRect(x, y, cellSize, cellSize);
+                    ctx.strokeRect(padding + c * cellSize, padding + rRaw * cellSize, cellSize, cellSize);
                 }
-                
             } else {
                 tooltip.style.display = 'none';
-                drawBoard(grid);
+                drawBoard(currentState.observation.canva_space);
             }
         });
 
         canvas.addEventListener('click', (e) => {
             if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
+            const { c, r, rows, cols } = getGridCoords(e);
             
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
-            const grid = currentState.observation.canva_space;
-            const rows = grid.length;
-            const cols = grid[0].length;
-            
-            const c = Math.floor((mouseX - padding) / cellSize);
-            const rRaw = Math.floor((mouseY - padding) / cellSize);
-            const r = rows - 1 - rRaw; // Y-inverted mapping
-            
-            if (c >= 0 && c < cols && rRaw >= 0 && rRaw < rows) {
+            if (c >= 0 && c < cols && r >= 0 && r < rows) {
                 document.getElementById('inputX').value = c;
                 document.getElementById('inputY').value = r;
-                // Auto-place on click if desired, but here we just update inputs
             }
         });
         
@@ -856,7 +832,6 @@
         });
 
         drawBoard(null);
-
     </script>
 </body>
 </html>
