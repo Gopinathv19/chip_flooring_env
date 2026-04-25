@@ -518,11 +518,9 @@
             socket.send(JSON.stringify({
                 type: 'step',
                 data: {
-                    action: {
-                        x: x,
-                        y: y,
-                        choosen_block_index: selectedBlockIndex
-                    }
+                    x: x,
+                    y: y,
+                    choosen_block_index: selectedBlockIndex
                 }
             }));
             
