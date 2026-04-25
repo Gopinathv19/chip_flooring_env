@@ -2,6 +2,7 @@ import copy
 from importlib import util as importlib_util
 from uuid import uuid4
 import os
+import math
 from pathlib import Path
 import random
 from typing import Optional
@@ -53,6 +54,7 @@ class ChipFlooringEnvironment(Environment):
         self.phase = "placement"
         self.phase_step = 0
         self.instruction = ""
+        self._just_revealed = False
         self._long_horizon_hidden_edges: set[tuple[str, str]] = set()
         self._long_horizon_constraints_revealed = False
         self._long_horizon_phase_boundaries = {
@@ -140,6 +142,11 @@ class ChipFlooringEnvironment(Environment):
         self._state.done=False
         self._state.delta_hpwl = 0.0
         self._update_phase()
+        shock_penality = 0.0
+
+        if self._just_revealed == True:
+            shock_penality = -0.5 * self._compute_total_hpwl()
+
         
         invalid_reasons = None
         row = action.x
@@ -168,13 +175,21 @@ class ChipFlooringEnvironment(Environment):
                 and action_mode == "commit"
             )
 
-            if can_commit:
+            if block in self._state.placed_blocks and getattr(block, "committed", False) and action_mode in {"move", "place"}:
+                invalid_reasons = "Cannot modify a committed block"
+                self._state.reward = -0.7
+            elif can_commit:
                 effective_action_mode = "commit"
                 block.fixed = True
                 block.committed = True
                 self._long_horizon_recent_positions.pop(block.id, None)
                 self._long_horizon_move_counts.pop(block.id, None)
-                self._state.reward = 0.2 if self.phase == "finalize" else 0.1
+                if self.phase == "finalize":
+                    self._state.reward = 0.5
+                else:
+                    self._state.reward = 0.1
+                if self._state.current_hpwl > 2.0:
+                    self._state.reward -= 0.1 * self._state.current_hpwl
             elif can_move:
                 effective_action_mode = "move"
                 if block.position == (row, col):
@@ -195,17 +210,29 @@ class ChipFlooringEnvironment(Environment):
                         self._long_horizon_move_counts[block.id] = self._long_horizon_move_counts.get(block.id, 0) + 1
                         block.move_count = self._long_horizon_move_counts[block.id]
                         incremental_hpwl = self._compute_total_hpwl() - previous_hpwl
+                        adaptation_bonus = 0.0
+                        if self.phase == "repair":
+                            if incremental_hpwl < 0:
+                                adaptation_bonus = 0.3 * abs(incremental_hpwl)
+                            else:
+                                adaptation_bonus = -0.2 * incremental_hpwl
                         self._state.delta_hpwl = incremental_hpwl
                         self._state.current_hpwl = previous_hpwl + incremental_hpwl
                         placed_neighbor_weight = self._placed_neighbor_weight(block)
                         move_penalty = 0.15 * max(1.0, float(block.power))
+                        if self.phase == "finalize":
+                            move_penalty *= 2.5
+                            move_penalty += 0.1 * self._long_horizon_move_counts.get(block.id, 0)
                         oscillation_penalty = 0.04 * float(self._long_horizon_move_counts.get(block.id, 0))
                         phase_scale = 0.6 if self.phase == "repair" else 0.9
+                        if self.phase == "finalize":
+                            phase_scale = 0.4
                         self._state.reward = (
                             phase_scale * (self.valid_placement_bonus + (0.02 * placed_neighbor_weight) - (self.hpwl_weight * incremental_hpwl * (max(1.0, float(block.power)) ** 2)))
                             - move_penalty
                             - oscillation_penalty
                         )
+                        self._state.reward += adaptation_bonus
             elif block in self._state.remaining_blocks:
                 effective_action_mode = "place"
                 if not self.canvas.can_occupy((row, col), block.y, block.x):
@@ -230,6 +257,8 @@ class ChipFlooringEnvironment(Environment):
                             grid_center = (self.grid_size / 2.0, self.grid_size / 2.0)
                             distance_penalty = 0.05 * power_scale * self._manhattan_distance(center, grid_center) / self.grid_size
                     phase_scale = 0.25 if self._is_long_horizon_task() and self.phase == "placement" else 1.0
+                    if self.phase == "finalize":
+                        phase_scale = 0.4
                     self._state.reward = phase_scale * (
                         self.valid_placement_bonus
                         + (0.02 * placed_neighbor_weight)
@@ -256,7 +285,21 @@ class ChipFlooringEnvironment(Environment):
             if self._state.done:
                 final_bonus = 2.0 if self._is_long_horizon_task() else self.final_completion_bonus
                 self._state.reward += final_bonus - (self.hpwl_weight * self._state.current_hpwl)
+
+            if self.phase == "repair":
+                if self._state.delta_hpwl >= 0:
+                    self._state.reward -= 0.05
+
+            if self.phase == "finalize":
+                uncommitted = [
+                    b for b in self._state.placed_blocks
+                    if not b.fixed and not getattr(b, "committed", False)
+                ]
+                if len(uncommitted) > 0:
+                    self._state.reward -= 0.05 * len(uncommitted)
         
+        self._state.reward+=shock_penality
+        self._state.reward = self._normalize_reward(self._state.reward)
         self._state.grid = self.canvas.grid
         self._state.phase = self.phase
         self._state.phase_step = self.phase_step
@@ -284,7 +327,7 @@ class ChipFlooringEnvironment(Environment):
                 "placed_blocks": [b.id for b in self._state.placed_blocks],
             }
         )
-
+        self._just_revealed = False
         return self._build_observation(invalid_reason=invalid_reasons)
             
 
@@ -569,11 +612,17 @@ class ChipFlooringEnvironment(Environment):
 
         if not self._long_horizon_constraints_revealed:
             self._long_horizon_constraints_revealed = True
+            self._just_revealed = True
+        else:
+            self._just_revealed = False
 
         if self._state.step_count < boundaries["repair"]:
             self.phase = "repair"
             self.phase_step = self._state.step_count - boundaries["reveal"]
-            self.instruction = "Repair the coarse layout after the hidden constraints are revealed."
+            if self._just_revealed:
+                self.instruction = "Hidden constraints revealed. Previous placements may be suboptimal. Re-evaluate and repair the layout."
+            else:
+                self.instruction = "Repair the layout considering all known constraints."
             return
 
         self.phase = "finalize"
@@ -593,6 +642,8 @@ class ChipFlooringEnvironment(Environment):
     def _move_block(self, block: "Block", new_position: tuple[int, int]) -> bool:
         if self.canvas is None or block.position is None:
             return False
+        if getattr(block, "committed", False) or block.fixed:
+            return False
 
         old_position = block.position
         if new_position == old_position:
@@ -607,6 +658,12 @@ class ChipFlooringEnvironment(Environment):
         block.position = new_position
         return True
 
+    def _normalize_reward(self, reward: float) -> float:
+        # Smoothly squash reward to (-1, 1)
+        scaled = math.tanh(reward)
+        # Clamp strictly to [-0.99, 0.99]
+        return max(-0.99, min(0.99, scaled))
+
     def get_model_output_penalty(self, parse_error: Optional[str]) -> float:
         """
         Penalty owned by the environment for invalid model response structure.
@@ -619,7 +676,11 @@ class ChipFlooringEnvironment(Environment):
     def _edge_importance(self, edge_info: dict) -> float:
         weight = float(edge_info.get("weight", 0.0))
         criticality = float(edge_info.get("criticality", 0.0))
-        return weight * (1.0 + criticality)
+        base = weight * (1.0 + criticality)
+        if self._long_horizon_constraints_revealed:
+            # After reveal, critical edges become more expensive to encode regret.
+            base *= (1.0 + 1.5 * criticality)
+        return base
 
     def _block_center(self, block: "Block"):
         if block.position is None:
@@ -649,7 +710,11 @@ class ChipFlooringEnvironment(Environment):
             neighbor_center = self._block_center(neighbor)
             if neighbor_center is None:
                 continue
-            total += self._edge_importance(edge_info) * self._manhattan_distance(placed_center, neighbor_center) / self.grid_size
+            distance = self._manhattan_distance(placed_center, neighbor_center)
+            distance_factor = distance / self.grid_size
+            if self._long_horizon_constraints_revealed:
+                distance_factor *= 1.5
+            total += self._edge_importance(edge_info) * distance_factor
 
         return total
 
@@ -677,7 +742,11 @@ class ChipFlooringEnvironment(Environment):
             dst_center = self._block_center(dst)
             if src_center is None or dst_center is None:
                 continue
-            total += self._edge_importance(edge) * self._manhattan_distance(src_center, dst_center) / self.grid_size
+            distance = self._manhattan_distance(src_center, dst_center)
+            distance_factor = distance / self.grid_size
+            if self._long_horizon_constraints_revealed:
+                distance_factor *= 1.5
+            total += self._edge_importance(edge) * distance_factor
 
         return total
 
@@ -1013,6 +1082,12 @@ class ChipFlooringEnvironment(Environment):
             focus_block = remaining_block_summaries[0] if remaining_block_summaries else None
         else:
             focus_block = None
+        if self.phase == "placement":
+            phase_goal = "explore"
+        elif self.phase == "repair":
+            phase_goal = "fix_layout"
+        else:
+            phase_goal = "commit_solution"
         return ChipFlooringObservation(
             canva_space=self.canvas.grid,
             board_ascii=self._render_ascii_board(),
@@ -1027,10 +1102,13 @@ class ChipFlooringEnvironment(Environment):
             placed_block_count=len(self._state.placed_blocks),
             task_name=self._state.task_name,
             phase=self._state.phase,
+            phase_goal=phase_goal,
             phase_step=self._state.phase_step,
             instruction=self._state.instruction,
             hidden_constraint_count=self._state.hidden_constraint_count,
             revealed_constraint_count=self._state.revealed_constraint_count,
+            reveal_event=self._just_revealed,
+            new_constraints_active=self._long_horizon_constraints_revealed,
             done=self._state.done,
             reward=self._state.reward,
             invalid_reasons=invalid_reason,

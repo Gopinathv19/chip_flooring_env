@@ -97,6 +97,10 @@ class ChipFlooringObservation(Observation):
     )
     task_name: str = Field(default="hard_standard_long_horizon", description="Current task difficulty name")
     phase: str = Field(default="placement", description="Current long-horizon phase")
+    phase_goal: str = Field(
+        default="explore",
+        description="High-level goal of the agent based on current phase",
+    )
     phase_step: int = Field(default=0, description="Step count within the current phase")
     instruction: str = Field(
         default="",
@@ -109,6 +113,14 @@ class ChipFlooringObservation(Observation):
     revealed_constraint_count: int = Field(
         default=0,
         description="Number of constraints revealed to the agent",
+    )
+    reveal_event: bool = Field(
+        default=False,
+        description="True if hidden constraints were revealed in the current step",
+    )
+    new_constraints_active: bool = Field(
+        default=False,
+        description="Whether all constraints are now visible to the agent",
     )
     invalid_reasons: Optional[str] = Field(
         default=None,
