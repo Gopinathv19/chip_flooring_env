@@ -1,6 +1,8 @@
 import copy
+from importlib import util as importlib_util
 from uuid import uuid4
 import os
+from pathlib import Path
 import random
 from typing import Optional
 
@@ -11,6 +13,21 @@ try:
     from ..models import ChipFlooringAction, ChipFlooringObservation, ChipFlooringResponseState
 except ImportError:
     from models import ChipFlooringAction, ChipFlooringObservation, ChipFlooringResponseState
+
+def _load_task_config_getter():
+    task_config_path = Path(__file__).with_name("task_configs.py")
+    spec = importlib_util.spec_from_file_location(
+        "chip_flooring_env.server.task_configs_standalone",
+        task_config_path,
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load task config module from {task_config_path}")
+    module = importlib_util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.get_base_task_configs
+
+
+get_base_task_configs = _load_task_config_getter()
 
 
 
@@ -27,6 +44,7 @@ class ChipFlooringEnvironment(Environment):
         self.invalid_block_penalty = -0.8
         self.invalid_overlap_penalty = -0.6
         self.invalid_bounds_penalty = -0.5
+        self.invalid_model_output_penalty = float(os.getenv("MODEL_PARSE_ERROR_PENALTY") or "-0.02")
         self._reset_count = 0   
         self.canvas = None
         self.blocks = []
@@ -589,6 +607,15 @@ class ChipFlooringEnvironment(Environment):
         block.position = new_position
         return True
 
+    def get_model_output_penalty(self, parse_error: Optional[str]) -> float:
+        """
+        Penalty owned by the environment for invalid model response structure.
+        Network/transport errors are explicitly excluded and return 0.0.
+        """
+        if parse_error in {"Invalid_or_empty_model_output", "invalid_action_fields"}:
+            return float(self.invalid_model_output_penalty)
+        return 0.0
+
     def _edge_importance(self, edge_info: dict) -> float:
         weight = float(edge_info.get("weight", 0.0))
         criticality = float(edge_info.get("criticality", 0.0))
@@ -1010,238 +1037,7 @@ class ChipFlooringEnvironment(Environment):
         )
 
     def _build_task_configs(self):
-        configs = {
-            "easy": {
-                "grid_size": 12,
-                "nodes": [
-                    {"id": "A", "height": 2, "width": 1},
-                    {"id": "B", "height": 2, "width": 2},
-                    {"id": "C", "height": 1, "width": 3},
-                    {"id": "D", "height": 2, "width": 1},
-                    {"id": "E", "height": 1, "width": 2},
-                ],
-                "edges": [
-                    {"from": "A", "to": "B", "weight": 1.4, "criticality": 0.9},
-                    {"from": "A", "to": "C", "weight": 1.1, "criticality": 0.6},
-                    {"from": "B", "to": "D", "weight": 1.6, "criticality": 0.8},
-                    {"from": "C", "to": "E", "weight": 1.3, "criticality": 0.7},
-                    {"from": "B", "to": "E", "weight": 0.9, "criticality": 0.5},
-                ],
-            },
-            "medium": {
-                "grid_size": 18,
-                "nodes": [
-                    {"id": "A", "height": 2, "width": 1},
-                    {"id": "B", "height": 3, "width": 1},
-                    {"id": "C", "height": 1, "width": 4},
-                    {"id": "D", "height": 2, "width": 2},
-                    {"id": "E", "height": 1, "width": 3},
-                    {"id": "F", "height": 3, "width": 2},
-                    {"id": "G", "height": 2, "width": 3},
-                    {"id": "H", "height": 1, "width": 2},
-                    {"id": "I", "height": 4, "width": 1},
-                    {"id": "J", "height": 2, "width": 4},
-                ],
-                "edges": [
-                    {"from": "A", "to": "F", "weight": 2.4, "criticality": 0.95},
-                    {"from": "A", "to": "C", "weight": 1.1, "criticality": 0.55},
-                    {"from": "B", "to": "G", "weight": 1.8, "criticality": 0.85},
-                    {"from": "B", "to": "D", "weight": 0.9, "criticality": 0.4},
-                    {"from": "C", "to": "H", "weight": 2.1, "criticality": 0.75},
-                    {"from": "C", "to": "J", "weight": 1.4, "criticality": 0.65},
-                    {"from": "D", "to": "I", "weight": 1.7, "criticality": 0.7},
-                    {"from": "E", "to": "J", "weight": 2.6, "criticality": 0.9},
-                    {"from": "B", "to": "E", "weight": 1.75, "criticality": 0.6},
-                    {"from": "D", "to": "G", "weight": 2.05, "criticality": 0.8},
-                    {"from": "F", "to": "J", "weight": 1.55, "criticality": 0.7},
-                ],
-            },
-            "heterogeneous": {
-                "grid_size": 24,
-                "nodes": [
-                    {"id": "A", "height": 2, "width": 1, "type": "macro", "power": 3.0},
-                    {"id": "B", "height": 3, "width": 1, "type": "standard", "power": 1.0},
-                    {"id": "C", "height": 1, "width": 4, "type": "standard", "power": 1.1},
-                    {"id": "D", "height": 2, "width": 2, "type": "macro", "power": 2.5},
-                    {"id": "E", "height": 1, "width": 3, "type": "standard", "power": 1.0},
-                    {"id": "F", "height": 3, "width": 2, "type": "standard", "power": 1.2},
-                    {"id": "G", "height": 2, "width": 3, "type": "macro", "power": 2.8},
-                    {"id": "H", "height": 1, "width": 2, "type": "standard", "power": 0.9},
-                    {"id": "I", "height": 4, "width": 1, "type": "standard", "power": 1.0},
-                    {"id": "J", "height": 2, "width": 4, "type": "macro", "power": 3.2},
-                    {"id": "K", "height": 3, "width": 2, "type": "standard", "power": 1.1},
-                    {"id": "L", "height": 1, "width": 1, "type": "standard", "power": 0.8},
-                ],
-                "edges": [
-                    {"from": "A", "to": "D", "weight": 2.4, "criticality": 0.95},
-                    {"from": "A", "to": "G", "weight": 1.6, "criticality": 0.8},
-                    {"from": "B", "to": "E", "weight": 1.2, "criticality": 0.6},
-                    {"from": "B", "to": "H", "weight": 0.9, "criticality": 0.35},
-                    {"from": "C", "to": "F", "weight": 1.8, "criticality": 0.7},
-                    {"from": "C", "to": "J", "weight": 2.3, "criticality": 0.9},
-                    {"from": "D", "to": "I", "weight": 1.5, "criticality": 0.65},
-                    {"from": "D", "to": "K", "weight": 1.1, "criticality": 0.5},
-                    {"from": "E", "to": "J", "weight": 2.0, "criticality": 0.85},
-                    {"from": "F", "to": "L", "weight": 1.4, "criticality": 0.55},
-                    {"from": "G", "to": "J", "weight": 2.6, "criticality": 0.9},
-                    {"from": "H", "to": "K", "weight": 1.0, "criticality": 0.4},
-                    {"from": "I", "to": "L", "weight": 1.3, "criticality": 0.55},
-                    {"from": "K", "to": "L", "weight": 0.8, "criticality": 0.3},
-                ],
-            },
-            "fixed_obstacles": {
-                "grid_size": 24,
-                "nodes": [
-                    {"id": "A", "height": 2, "width": 1},
-                    {"id": "B", "height": 3, "width": 1},
-                    {"id": "C", "height": 1, "width": 4},
-                    {"id": "D", "height": 2, "width": 2},
-                    {"id": "E", "height": 1, "width": 3},
-                    {"id": "F", "height": 3, "width": 2},
-                    {"id": "G", "height": 2, "width": 3},
-                    {"id": "H", "height": 1, "width": 2},
-                    {"id": "I", "height": 4, "width": 1},
-                    {"id": "J", "height": 2, "width": 4},
-                    {"id": "K", "height": 3, "width": 2},
-                    {"id": "L", "height": 1, "width": 1},
-                    {"id": "M", "height": 2, "width": 1},
-                    {"id": "N", "height": 1, "width": 2},
-                    {"id": "O", "height": 3, "width": 3},
-                    {"id": "P", "height": 2, "width": 2, "fixed": True, "position": [8, 8]},
-                    {"id": "Q", "height": 1, "width": 4, "fixed": True, "position": [14, 4]},
-                    {"id": "R", "height": 3, "width": 1, "fixed": True, "position": [4, 16]},
-                ],
-                "edges": [
-                    {"from": "A", "to": "F", "weight": 2.4, "criticality": 0.95},
-                    {"from": "A", "to": "C", "weight": 1.1, "criticality": 0.55},
-                    {"from": "B", "to": "G", "weight": 1.8, "criticality": 0.85},
-                    {"from": "B", "to": "D", "weight": 0.9, "criticality": 0.45},
-                    {"from": "C", "to": "H", "weight": 2.1, "criticality": 0.75},
-                    {"from": "C", "to": "J", "weight": 1.4, "criticality": 0.65},
-                    {"from": "D", "to": "I", "weight": 1.7, "criticality": 0.7},
-                    {"from": "D", "to": "K", "weight": 0.8, "criticality": 0.5},
-                    {"from": "E", "to": "J", "weight": 2.6, "criticality": 0.9},
-                    {"from": "E", "to": "L", "weight": 1.0, "criticality": 0.55},
-                    {"from": "F", "to": "M", "weight": 1.2, "criticality": 0.6},
-                    {"from": "F", "to": "N", "weight": 2.0, "criticality": 0.8},
-                    {"from": "G", "to": "O", "weight": 2.8, "criticality": 0.95},
-                    {"from": "B", "to": "E", "weight": 1.75, "criticality": 0.6},
-                    {"from": "D", "to": "G", "weight": 2.05, "criticality": 0.8},
-                    {"from": "F", "to": "J", "weight": 1.55, "criticality": 0.7},
-                    {"from": "H", "to": "L", "weight": 0.85, "criticality": 0.45},
-                    {"from": "I", "to": "N", "weight": 1.45, "criticality": 0.65},
-                    {"from": "K", "to": "O", "weight": 2.25, "criticality": 0.9},
-                    {"from": "P", "to": "A", "weight": 1.8, "criticality": 0.75},
-                    {"from": "P", "to": "J", "weight": 2.1, "criticality": 0.9},
-                    {"from": "Q", "to": "D", "weight": 1.3, "criticality": 0.55},
-                    {"from": "Q", "to": "K", "weight": 1.6, "criticality": 0.7},
-                    {"from": "R", "to": "G", "weight": 1.9, "criticality": 0.8},
-                    {"from": "R", "to": "O", "weight": 2.2, "criticality": 0.85},
-                ],
-            },
-            "long_horizon": {
-                "grid_size": 28,
-                "phase_reveal_step": 10,
-                "phase_repair_step": 20,
-                "phase_finalize_step": 30,
-                "hidden_edge_fraction": 0.35,
-                "nodes": [
-                    {"id": "A", "height": 2, "width": 1, "type": "macro", "power": 3.2},
-                    {"id": "B", "height": 3, "width": 1, "type": "standard", "power": 1.1},
-                    {"id": "C", "height": 1, "width": 4, "type": "standard", "power": 1.0},
-                    {"id": "D", "height": 2, "width": 2, "type": "macro", "power": 2.7},
-                    {"id": "E", "height": 1, "width": 3, "type": "standard", "power": 1.0},
-                    {"id": "F", "height": 3, "width": 2, "type": "standard", "power": 1.2},
-                    {"id": "G", "height": 2, "width": 3, "type": "macro", "power": 2.9},
-                    {"id": "H", "height": 1, "width": 2, "type": "standard", "power": 0.9},
-                    {"id": "I", "height": 4, "width": 1, "type": "standard", "power": 1.0},
-                    {"id": "J", "height": 2, "width": 4, "type": "macro", "power": 3.4},
-                    {"id": "K", "height": 3, "width": 2, "type": "standard", "power": 1.1},
-                    {"id": "L", "height": 1, "width": 1, "type": "standard", "power": 0.8},
-                    {"id": "M", "height": 2, "width": 1, "type": "standard", "power": 1.0},
-                    {"id": "N", "height": 1, "width": 2, "type": "standard", "power": 0.9},
-                    {"id": "O", "height": 3, "width": 3, "type": "macro", "power": 3.0},
-                    {"id": "P", "height": 2, "width": 2, "type": "standard", "power": 1.2},
-                    {"id": "Q", "height": 1, "width": 3, "type": "standard", "power": 1.0},
-                    {"id": "R", "height": 3, "width": 1, "type": "standard", "power": 1.1},
-                    {"id": "S", "height": 2, "width": 2, "type": "macro", "power": 2.6},
-                    {"id": "T", "height": 1, "width": 4, "type": "standard", "power": 1.0},
-                    {"id": "U", "height": 2, "width": 1, "type": "standard", "power": 1.0},
-                    {"id": "V", "height": 3, "width": 2, "type": "standard", "power": 1.1},
-                    {"id": "W", "height": 1, "width": 2, "type": "standard", "power": 0.9},
-                    {"id": "X", "height": 2, "width": 3, "type": "macro", "power": 3.1},
-                ],
-                "edges": [
-                    {"from": "A", "to": "D", "weight": 2.6, "criticality": 0.95},
-                    {"from": "A", "to": "G", "weight": 1.9, "criticality": 0.85},
-                    {"from": "A", "to": "J", "weight": 2.4, "criticality": 0.9},
-                    {"from": "B", "to": "E", "weight": 1.3, "criticality": 0.6},
-                    {"from": "B", "to": "H", "weight": 1.0, "criticality": 0.4},
-                    {"from": "C", "to": "F", "weight": 1.7, "criticality": 0.7},
-                    {"from": "C", "to": "I", "weight": 1.1, "criticality": 0.5},
-                    {"from": "D", "to": "J", "weight": 2.3, "criticality": 0.9},
-                    {"from": "D", "to": "K", "weight": 1.0, "criticality": 0.45},
-                    {"from": "E", "to": "L", "weight": 0.9, "criticality": 0.35},
-                    {"from": "E", "to": "M", "weight": 1.2, "criticality": 0.55},
-                    {"from": "F", "to": "N", "weight": 2.0, "criticality": 0.8},
-                    {"from": "G", "to": "O", "weight": 2.8, "criticality": 0.95},
-                    {"from": "H", "to": "P", "weight": 1.5, "criticality": 0.65},
-                    {"from": "I", "to": "Q", "weight": 1.2, "criticality": 0.55},
-                    {"from": "J", "to": "R", "weight": 1.9, "criticality": 0.75},
-                    {"from": "K", "to": "S", "weight": 2.1, "criticality": 0.85},
-                    {"from": "L", "to": "T", "weight": 0.8, "criticality": 0.3},
-                    {"from": "M", "to": "U", "weight": 1.4, "criticality": 0.6},
-                    {"from": "N", "to": "V", "weight": 1.6, "criticality": 0.7},
-                    {"from": "O", "to": "W", "weight": 2.2, "criticality": 0.88},
-                    {"from": "P", "to": "X", "weight": 2.0, "criticality": 0.82},
-                    {"from": "Q", "to": "X", "weight": 1.5, "criticality": 0.65},
-                    {"from": "S", "to": "X", "weight": 2.4, "criticality": 0.93},
-                    {"from": "R", "to": "T", "weight": 1.0, "criticality": 0.4},
-                    {"from": "V", "to": "X", "weight": 1.7, "criticality": 0.78},
-                ],
-            },
-            "hard": {
-                "grid_size": 24,
-                "nodes": [
-                    {"id": "A", "height": 2, "width": 1},
-                    {"id": "B", "height": 3, "width": 1},
-                    {"id": "C", "height": 1, "width": 4},
-                    {"id": "D", "height": 2, "width": 2},
-                    {"id": "E", "height": 1, "width": 3},
-                    {"id": "F", "height": 3, "width": 2},
-                    {"id": "G", "height": 2, "width": 3},
-                    {"id": "H", "height": 1, "width": 2},
-                    {"id": "I", "height": 4, "width": 1},
-                    {"id": "J", "height": 2, "width": 4},
-                    {"id": "K", "height": 3, "width": 2},
-                    {"id": "L", "height": 1, "width": 1},
-                    {"id": "M", "height": 2, "width": 1},
-                    {"id": "N", "height": 1, "width": 2},
-                    {"id": "O", "height": 3, "width": 3},
-                ],
-                "edges": [
-                    {"from": "A", "to": "F", "weight": 2.4, "criticality": 0.95},
-                    {"from": "A", "to": "C", "weight": 1.1, "criticality": 0.55},
-                    {"from": "B", "to": "G", "weight": 1.8, "criticality": 0.85},
-                    {"from": "B", "to": "D", "weight": 0.9, "criticality": 0.45},
-                    {"from": "C", "to": "H", "weight": 2.1, "criticality": 0.75},
-                    {"from": "C", "to": "J", "weight": 1.4, "criticality": 0.65},
-                    {"from": "D", "to": "I", "weight": 1.7, "criticality": 0.7},
-                    {"from": "D", "to": "K", "weight": 0.8, "criticality": 0.5},
-                    {"from": "E", "to": "J", "weight": 2.6, "criticality": 0.9},
-                    {"from": "E", "to": "L", "weight": 1.0, "criticality": 0.55},
-                    {"from": "F", "to": "M", "weight": 1.2, "criticality": 0.6},
-                    {"from": "F", "to": "N", "weight": 2.0, "criticality": 0.8},
-                    {"from": "G", "to": "O", "weight": 2.8, "criticality": 0.95},
-                    {"from": "B", "to": "E", "weight": 1.75, "criticality": 0.6},
-                    {"from": "D", "to": "G", "weight": 2.05, "criticality": 0.8},
-                    {"from": "F", "to": "J", "weight": 1.55, "criticality": 0.7},
-                    {"from": "H", "to": "L", "weight": 0.85, "criticality": 0.45},
-                    {"from": "I", "to": "N", "weight": 1.45, "criticality": 0.65},
-                    {"from": "K", "to": "O", "weight": 2.25, "criticality": 0.9},
-                ],
-            },
-        }
+        configs = get_base_task_configs()
         composite_configs = self._build_composite_task_configs(configs)
         composite_configs["long_horizon"] = self._clone_task_config(composite_configs["hard_heterogeneous_long_horizon"])
         return composite_configs

@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+from time import sleep
 from importlib import util as importlib_util
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -57,6 +58,7 @@ BENCHMARK = (
 MAX_STEPS = int(os.getenv("MAX_STEPS") or "100")
 TEMPERATURE = float(os.getenv("TEMPERATURE") or "0.2")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS") or "120")
+MODEL_CONNECTION_RETRY_SLEEP_MS = int(os.getenv("MODEL_CONNECTION_RETRY_SLEEP_MS") or "250")
 
 
 def load_module(module_name: str, path: Path):
@@ -301,6 +303,26 @@ def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def is_connection_error(exc: Exception) -> bool:
+    name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    network_markers = (
+        "connection",
+        "connect",
+        "timeout",
+        "timed out",
+        "network",
+        "dns",
+        "name resolution",
+        "temporarily unavailable",
+        "service unavailable",
+        "bad gateway",
+        "gateway timeout",
+        "remoteprotocolerror",
+    )
+    return any(marker in name or marker in message for marker in network_markers)
+
+
 def model_suggest_action(
     client: OpenAI,
     step: int,
@@ -316,7 +338,9 @@ def model_suggest_action(
     recent_history: List[Dict[str, Any]],
     candidate_actions: List[Dict[str, Any]],
     previous_failure: str = ""
-) -> Tuple[Optional[Dict[str,Any]],str]:
+) -> Tuple[Optional[Dict[str,Any]], str, Optional[str], bool]:
+    if client is None:
+        return None, "", "client_not_configured", True
     try:
         user_prompt = build_prompt(
             step,
@@ -345,9 +369,11 @@ def model_suggest_action(
             max_tokens=MAX_TOKENS,
         )
         content = completion.choices[0].message.content or ""
-        return extract_json_object(content),content
+        return extract_json_object(content), content, None, False
     except Exception as exc:
-        return None,""
+        if is_connection_error(exc):
+            return None, "", "connection_error", True
+        return None, "", str(exc.__class__.__name__), True
 
 
 def normalize_action(
@@ -375,23 +401,6 @@ def normalize_action(
     )
 
 
-def action_is_in_candidates(
-    action_repr: Optional[Dict[str, Any]],
-    candidate_actions: List[Dict[str, Any]],
-) -> bool:
-    if not action_repr:
-        return False
-    return any(
-        candidate["block_id"] == action_repr.get("block_id")
-        and int(candidate["x"]) == int(action_repr.get("x", -1))
-        and int(candidate["y"]) == int(action_repr.get("y", -1))
-        for candidate in candidate_actions
-    )
-    
-
- 
-
-
 def action_to_string(action_repr: Optional[Dict[str, Any]]) -> str:
     if not action_repr:
         return "null"
@@ -407,32 +416,6 @@ def compute_score(env: ChipFlooringEnvironment, rewards: List[float]) -> float:
     return round(max(0.01, min(0.99, score)), 2)
 
 
-def choose_fallback_action(
-    env: ChipFlooringEnvironment,
-    candidate_actions: List[Dict[str, Any]],
-) -> Tuple[Optional[ChipFlooringAction], Optional[Dict[str, Any]]]:
-    if not candidate_actions:
-        return None, None
-
-    candidate = candidate_actions[0]
-    index = next(
-        (i for i, block in enumerate(env.state.blocks) if block.id == candidate["block_id"]),
-        -1,
-    )
-    if index < 0:
-        return None, None
-
-    return (
-        ChipFlooringAction(
-            x=int(candidate["x"]),
-            y=int(candidate["y"]),
-            choosen_block_index=index,
-            action_type=str(candidate.get("action_type", "place")),
-        ),
-        candidate,
-    )
-
-
 def _is_local_api_base(url: str) -> bool:
     return url.startswith(
         ("http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost")
@@ -440,6 +423,9 @@ def _is_local_api_base(url: str) -> bool:
 
 
 def run_task(task_name: str, client: Optional[OpenAI]) -> float:
+    if client is None:
+        raise RuntimeError("Model-only mode requires a configured API client")
+
     previous_task_name = os.environ.get("TASK_NAME")
     os.environ["TASK_NAME"] = task_name
 
@@ -484,58 +470,53 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                     per_block_limit=1,
                 )
 
-            suggested, raw_content = model_suggest_action(
-                client,
-                step,
-                grid,
-                placed_blocks,
-                remaining_blocks,
-                phase,
-                instruction,
-                block_summaries,
-                placement_focus,
-                density_map,
-                total_reward,
-                recent_history,
-                candidate_actions,
-                previous_failure=previous_failure,
-            )
+            action: Optional[ChipFlooringAction] = None
+            action_repr: Optional[Dict[str, Any]] = None
+            parse_error: Optional[str] = None
+            attempt = 0
+            model_retry_penalty = 0.0
 
-            action, action_repr, parse_error = normalize_action(env, suggested)
-            if action is not None and not action_is_in_candidates(action_repr, candidate_actions):
-                action = None
-                action_repr = None
-                parse_error = "model_action_not_in_candidates"
+            while action is None:
+                attempt += 1
+                suggested, _, request_error, had_transport_error = model_suggest_action(
+                    client,
+                    step,
+                    grid,
+                    placed_blocks,
+                    remaining_blocks,
+                    phase,
+                    instruction,
+                    block_summaries,
+                    placement_focus,
+                    density_map,
+                    total_reward,
+                    recent_history,
+                    candidate_actions,
+                    previous_failure=previous_failure,
+                )
 
-            if action is None:
-                fallback_action, fallback_repr = choose_fallback_action(env, candidate_actions)
-                if fallback_action is None:
-                    reward = -1.0
-                    rewards.append(reward)
-                    total_reward += reward
-                    steps_taken = step
-                    consecutive_invalids += 1
-                    previous_failure = parse_error or "invalid model output"
-                    recent_history.append(
-                        {
-                            "step": step,
-                            "action": None,
-                            "reward": reward,
-                            "done": False,
-                            "invalid_reason": previous_failure,
-                            "source": "model_failed_no_fallback",
-                        }
-                    )
-                    log_step(step=step, action="null", reward=reward, done=False, error=previous_failure)
+                if had_transport_error:
+                    sleep(max(0.0, MODEL_CONNECTION_RETRY_SLEEP_MS / 1000.0))
                     continue
 
-                action = fallback_action
-                action_repr = fallback_repr
-                parse_error = "model_invalid_fallback_used"
+                action, action_repr, parse_error = normalize_action(env, suggested)
+
+                if action is None:
+                    previous_failure = parse_error or "invalid model output"
+                    model_retry_penalty += float(env.get_model_output_penalty(parse_error))
+                    if attempt == 1 or attempt % 3 == 0:
+                        print(
+                            f"Retrying model response for step={step}, attempt={attempt}, "
+                            f"reason={previous_failure}, penalty={model_retry_penalty:.2f}",
+                            flush=True,
+                        )
+
+            if action is None or action_repr is None:
+                raise RuntimeError(f"Unable to obtain valid model action at step {step}")
 
             result = env.step(action)
             obs = result
-            reward = float(getattr(result, "reward", 0.0) or 0.0)
+            reward = float(getattr(result, "reward", 0.0) or 0.0) + model_retry_penalty
             done = bool(getattr(result, "done", False))
             invalid_reason = getattr(result, "invalid_reasons", None)
 
@@ -550,6 +531,7 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                     "done": done,
                     "invalid_reason": invalid_reason,
                     "source": "model" if parse_error is None else parse_error,
+                    "model_retry_penalty": round(model_retry_penalty, 4),
                 }
             )
             recent_history = recent_history[-24:]
