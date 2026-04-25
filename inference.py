@@ -80,24 +80,34 @@ ChipFlooringEnvironment = env_mod.ChipFlooringEnvironment
 
 
 def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+    print("\n" + "═" * 60)
+    print(f"🚀 INFERENCE STARTED")
+    print(f"► Task  : {task}")
+    print(f"► Env   : {env}")
+    print(f"► Model : {model}")
+    print("═" * 60 + "\n", flush=True)
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
-    error_val = error if error else "null"
+    error_val = error if error else "None"
+    reward_str = f"+{reward:.2f}" if reward > 0 else f"{reward:.2f}"
+    
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} "
-        f"done={str(done).lower()} error={error_val}",
+        f"\n❖ Step {step:02d} " + "━" * 40 + "\n"
+        f"  │ Action : {action}\n"
+        f"  │ Reward : {reward_str}  |  Done: {done}  |  Error: {error_val}",
         flush=True,
     )
 
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
-        flush=True,
-    )
+    status = "✅ SUCCESS" if success else "❌ FAILED"
+    print("\n\n" + "═" * 60)
+    print(f"{status} in {steps} steps")
+    print(f"► Final Score : {score:.2f}")
+    print(f"► Rewards     : [{rewards_str}]")
+    print("═" * 60 + "\n", flush=True)
 
 
 def is_long_horizon_task_name(task_name: str) -> bool:
@@ -113,24 +123,8 @@ def compact_block_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": summary.get("id"),
         "priority": round(float(summary.get("priority_score", 0.0)), 3),
-        "committed": bool(summary.get("committed", False)),
-        "move_count": int(summary.get("move_count", 0) or 0),
-        "placed_neighbors": [
-            {
-                "id": neighbor.get("id"),
-                "weight": round(float(neighbor.get("weight", 0.0)), 3),
-                "pos": neighbor.get("position"),
-            }
-            for neighbor in (summary.get("placed_neighbors") or [])[:3]
-        ],
-        "strongest": [
-            {
-                "id": neighbor.get("id"),
-                "weight": round(float(neighbor.get("weight", 0.0)), 3),
-                "placed": bool(neighbor.get("placed")),
-            }
-            for neighbor in (summary.get("strongest_neighbors") or [])[:3]
-        ],
+        "degree": summary.get("degree", 0),
+        "placed_neighbors": len(summary.get("placed_neighbors") or [])
     }
 
 
@@ -237,36 +231,44 @@ def generate_candidate_actions(
 
 def build_prompt(
     step: int,
-    placed_blocks: List[Dict[str, Any]],
-    remaining_blocks: List[Dict[str, Any]],
+    board_ascii: str,
+    placed_count: int,
+    remaining_count: int,
     phase: str,
     instruction: str,
-    block_summaries: List[Dict[str, Any]],
-    placement_focus: Optional[Dict[str, Any]],
-    density_map: List[List[float]],
-    total_reward: float,
+    focus_block: Optional[Dict[str, Any]],
+    current_hpwl: float,
+    delta_hpwl: float,
     recent_history: List[Dict[str, Any]],
     candidate_actions: List[Dict[str, Any]],
     previous_failure: str = "",
 ) -> str:
-    focus_compact = compact_block_summary(placement_focus) if placement_focus else None
-    summaries_compact = [compact_block_summary(summary) for summary in block_summaries[:6]]
-    candidates_compact = candidate_actions[:8]
+    focus_compact = compact_block_summary(focus_block) if focus_block else None
+    
+    candidates_compact = []
+    for c in candidate_actions[:12]:
+        candidates_compact.append({
+            "block_id": c.get("block_id"),
+            "x": c.get("x"),
+            "y": c.get("y"),
+            "score": round(c.get("score", 0.0), 3),
+            "congestion": round(c.get("congestion_score", 0.0), 3),
+            "action_type": c.get("action_type", "place")
+        })
+
     return (
         "Choose one action from the candidate actions.\n"
         "Return JSON only with one of these forms: {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"place\"}, {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"move\"}, or {\"block_id\":\"...\",\"x\":0,\"y\":0,\"action_type\":\"commit\"}.\n"
         "Use action_type=\"move\" only when the episode is in repair or finalize and the candidate is a relocation.\n"
         "Use action_type=\"commit\" in repair or finalize when the current position should be locked and no further relocation is needed.\n"
-        "Prefer the action that best reduces wirelength while staying legal.\n"
-        "Use the focus block, placed neighbor positions, phase, instruction, and candidate scores.\n\n"
-        f"step={step}\n"
-        f"phase={phase}\n"
+        "Prefer the action that best reduces wirelength while staying legal. Higher candidate 'score' is better. Lower 'congestion' is better.\n\n"
+        f"step={step} phase={phase}\n"
         f"instruction={instruction}\n"
-        f"placed_count={len(placed_blocks)} remaining_count={len(remaining_blocks)} total_reward={total_reward:.2f}\n"
+        f"placed_count={placed_count} remaining_count={remaining_count} current_hpwl={current_hpwl:.2f} delta_hpwl={delta_hpwl:.2f}\n"
         f"focus={json.dumps(focus_compact)}\n"
-        f"summaries={json.dumps(summaries_compact)}\n"
-        f"density={json.dumps(density_map)}\n"
-        f"recent={json.dumps(summarize_history(recent_history, limit=4))}\n"
+        "board_ascii:\n"
+        f"{board_ascii}\n"
+        f"recent_history={json.dumps(summarize_history(recent_history, limit=3))}\n"
         f"candidates={json.dumps(candidates_compact)}\n"
         + (f"failure={previous_failure}\n" if previous_failure else "")
     )
@@ -304,15 +306,14 @@ def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
 def model_suggest_action(
     client: OpenAI,
     step: int,
-    grid: List[List[int]],
-    placed_blocks:List[Dict[str,Any]],
-    remaining_blocks: List[Dict[str, Any]],
+    board_ascii: str,
+    placed_count: int,
+    remaining_count: int,
     phase: str,
     instruction: str,
-    block_summaries: List[Dict[str, Any]],
-    placement_focus: Optional[Dict[str, Any]],
-    density_map: List[List[float]],
-    total_reward: float,
+    focus_block: Optional[Dict[str, Any]],
+    current_hpwl: float,
+    delta_hpwl: float,
     recent_history: List[Dict[str, Any]],
     candidate_actions: List[Dict[str, Any]],
     previous_failure: str = ""
@@ -320,14 +321,14 @@ def model_suggest_action(
     try:
         user_prompt = build_prompt(
             step,
-            placed_blocks,
-            remaining_blocks,
+            board_ascii,
+            placed_count,
+            remaining_count,
             phase,
             instruction,
-            block_summaries,
-            placement_focus,
-            density_map,
-            total_reward,
+            focus_block,
+            current_hpwl,
+            delta_hpwl,
             recent_history,
             candidate_actions,
             previous_failure,
@@ -398,12 +399,29 @@ def action_to_string(action_repr: Optional[Dict[str, Any]]) -> str:
     return json.dumps(action_repr, separators=(",", ":"))
 
 
-def compute_score(env: ChipFlooringEnvironment, rewards: List[float]) -> float:
-    block_count = max(1, len(env.state.blocks))
-    completion = len(env.state.placed_blocks) / block_count
-    hpwl_quality = 1.0 - min(1.0, float(env.state.current_hpwl) / max(1.0, block_count * 4.0))
-    reward_signal = sum(rewards) / max(1.0, float(len(rewards)))
-    score = (0.5 * completion) + (0.3 * hpwl_quality) + (0.2 * max(0.0, min(1.0, reward_signal)))
+def compute_score(env: ChipFlooringEnvironment, rewards: List[float], recent_history: List[Dict[str, Any]]) -> float:
+    trajectory = recent_history
+    done = env.state.done
+    total_blocks = max(1, len(env.state.blocks))
+    placed_count = len(env.state.placed_blocks)
+    completion = placed_count / total_blocks
+    current_hpwl = float(env.state.current_hpwl)
+    hpwl_quality = 1.0 - min(1.0, current_hpwl / max(1.0, total_blocks * 4.0))
+    invalid_steps = sum(1 for step in trajectory if step.get("invalid_reason") is not None)
+    total_steps = len(trajectory) or 1
+    valid_rate = 1.0 - min(1.0, invalid_steps / total_steps)
+    
+    phase_names = {str(step.get("phase", "")) for step in trajectory if step.get("phase")}
+    repair_moves = sum(
+        1 for step in trajectory
+        if isinstance(step.get("action"), dict) and str(step["action"].get("action_type", "place")).lower() == "move"
+    )
+    phase_coverage = min(1.0, len(phase_names) / 3.0)
+    repair_usage = min(1.0, repair_moves / max(1, total_blocks // 3))
+    
+    raw = (0.35 * completion) + (0.25 * hpwl_quality) + (0.15 * valid_rate) + (0.15 * phase_coverage) + (0.10 * repair_usage)
+    bonus = 0.12 if done else 0.0
+    score = raw + bonus
     return round(max(0.01, min(0.99, score)), 2)
 
 
@@ -467,13 +485,14 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                 break
 
             grid = getattr(obs, "canva_space", env.canvas.grid if env.canvas else [])
+            board_ascii = getattr(obs, "board_ascii", "")
             placed_blocks = getattr(obs, "placed_blocks", [])
             remaining_blocks = getattr(obs, "remaining_blocks", [])
             phase = getattr(obs, "phase", "placement")
             instruction = getattr(obs, "instruction", "")
-            block_summaries = getattr(obs, "block_summaries", [])
             placement_focus = getattr(obs, "placement_focus", None)
-            density_map = getattr(obs, "density_map", [])
+            current_hpwl = getattr(obs, "current_hpwl", 0.0)
+            delta_hpwl = getattr(obs, "delta_hpwl", 0.0)
             candidate_actions = getattr(obs, "candidate_positions", [])
             if not candidate_actions:
                 candidate_actions = generate_candidate_actions(
@@ -487,15 +506,14 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
             suggested, raw_content = model_suggest_action(
                 client,
                 step,
-                grid,
-                placed_blocks,
-                remaining_blocks,
+                board_ascii,
+                len(placed_blocks),
+                len(remaining_blocks),
                 phase,
                 instruction,
-                block_summaries,
                 placement_focus,
-                density_map,
-                total_reward,
+                current_hpwl,
+                delta_hpwl,
                 recent_history,
                 candidate_actions,
                 previous_failure=previous_failure,
@@ -548,6 +566,8 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                     "action": action_repr,
                     "reward": reward,
                     "done": done,
+                    "phase": phase,
+                    "delta_hpwl": float(getattr(result, "delta_hpwl", 0.0) or 0.0),
                     "invalid_reason": invalid_reason,
                     "source": "model" if parse_error is None else parse_error,
                 }
@@ -583,7 +603,7 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                 close()
             except Exception:
                 pass
-        score = compute_score(env, rewards)
+        score = compute_score(env, rewards, recent_history)
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
         if previous_task_name is None:
             os.environ.pop("TASK_NAME", None)
@@ -596,6 +616,16 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
 def main() -> None:
     resolved_api_key = API_KEY or ("lm-studio" if _is_local_api_base(API_BASE_URL) else None)
     client = OpenAI(base_url=API_BASE_URL, api_key=resolved_api_key) if resolved_api_key else None
+
+    is_local = _is_local_api_base(API_BASE_URL)
+    print("=" * 60, flush=True)
+    if is_local:
+        print(f"[INFO] Using LOCAL model: {MODEL_NAME}", flush=True)
+        print(f"[INFO] Local API Base URL: {API_BASE_URL}", flush=True)
+    else:
+        print(f"[INFO] Using CLOUD HUGGINGFACE model: {MODEL_NAME}", flush=True)
+        print(f"[INFO] Cloud API Base URL: {API_BASE_URL}", flush=True)
+    print("=" * 60, flush=True)
 
     task_scores: Dict[str, float] = {}
     for task_name in TASKS_TO_RUN:
