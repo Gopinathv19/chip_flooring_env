@@ -23,6 +23,7 @@ _CSS = """
   --chip:#0d5f4c;
   --good:#0b7d44;
   --bad:#b42318;
+
 }
 
 footer{display:none !important;}
@@ -479,7 +480,7 @@ def build_clean_gradio_ui(
             "Press Reset to start a fresh episode, then choose coordinates and place one block per step."
             "</div>"
         )
-
+#helloworld
     with gr.Blocks(title=f"{title} — Clean UI", css=_CSS) as demo:
         s_state = gr.State(dict(state0))
 
