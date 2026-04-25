@@ -31,7 +31,7 @@ Usage:
 import os
 
 try:
-    from openenv.core.env_server.http_server import create_app
+    from openenv.core.env_server.http_server import create_fastapi_app
 except Exception as e:  # pragma: no cover
     raise ImportError(
         "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
@@ -41,38 +41,37 @@ try:
     from ..models import ChipFlooringAction, ChipFlooringObservation
     from .chip_flooring_env_environment import ChipFlooringEnvironment
     from .graders import GRADERS
-    from .ui import build_clean_gradio_ui
 except ImportError:
     from models import ChipFlooringAction, ChipFlooringObservation
     from server.chip_flooring_env_environment import ChipFlooringEnvironment
     from server.graders import GRADERS
-    from server.ui import build_clean_gradio_ui
 from fastapi import Body
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+import pathlib
 
 
-import gradio as gr
-_original_tabbed_interface = gr.TabbedInterface
-
-def _single_tab_interface(interface_list, tab_names, **kwargs):
-    # interface_list[0] is the default Playground
-    # interface_list[1] is the Custom UI (gradio_builder output)
-    if len(interface_list) > 1:
-        return interface_list[1]
-    return interface_list[0]
-
-gr.TabbedInterface = _single_tab_interface
-
-# Create the app with web interface and README integration
-app = create_app(
+# Create the standard API app
+app = create_fastapi_app(
     ChipFlooringEnvironment,
     ChipFlooringAction,
     ChipFlooringObservation,
-    env_name="chip_flooring_env",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
-    gradio_builder=build_clean_gradio_ui,
 )
 
-gr.TabbedInterface = _original_tabbed_interface
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/web", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/web/", response_class=HTMLResponse, include_in_schema=False)
+async def serve_frontend():
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>UI is being built...</h1>"
 
 _TASK_GRADER_SPECS: dict[str, str] = {
     "easy": "server.graders.grade_easy",

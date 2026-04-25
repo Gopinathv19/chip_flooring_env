@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chip Flooring - PCB Designer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --pcb-bg: #002b12;
+            --pcb-trace: #00ff66;
+            --pcb-pad-outline: #ffcc00;
+            --pcb-pad-fill: #ffd700;
+            --chip-bg: #111111;
+            --chip-text: #cccccc;
+            --glow: 0 0 12px var(--pcb-trace);
+            --bg-dark: #030805;
+            --panel-bg: rgba(0, 20, 10, 0.85);
+            --border: #005522;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 50% 50%, #001a0a 0%, #000000 100%),
+                linear-gradient(rgba(0, 255, 102, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 102, 0.03) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            color: #00ff66;
+            font-family: 'Rajdhani', sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 15px 30px;
+            background: rgba(0, 15, 5, 0.9);
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 255, 102, 0.15);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 26px;
+            text-shadow: var(--glow);
+            letter-spacing: 3px;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 380px;
+            background: rgba(0, 15, 5, 0.7);
+            border-right: 2px solid var(--border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+            backdrop-filter: blur(5px);
+            box-shadow: 5px 0 20px rgba(0,0,0,0.5);
+            z-index: 5;
+        }
+
+        .board-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 30px;
+            position: relative;
+        }
+
+        canvas {
+            background-color: var(--pcb-bg);
+            border: 6px solid #001a0a;
+            border-radius: 12px;
+            box-shadow: 0 0 40px rgba(0, 255, 102, 0.15), inset 0 0 50px rgba(0,0,0,0.8);
+            cursor: crosshair;
+            image-rendering: pixelated;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            background: rgba(0, 25, 10, 0.4);
+            box-shadow: inset 0 0 15px rgba(0, 255, 102, 0.05);
+            position: relative;
+        }
+        
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--pcb-trace), transparent);
+            opacity: 0.5;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+            color: #fff;
+            text-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+
+        select, button, input {
+            background: rgba(0, 15, 5, 0.8);
+            color: #00ff66;
+            border: 1px solid var(--border);
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: 'Share Tech Mono', monospace;
+            width: 100%;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--pcb-trace);
+            box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+        }
+
+        button {
+            background: linear-gradient(180deg, #004422, #002211);
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+            border: 1px solid #00aa44;
+            box-shadow: 0 4px 0 #001105;
+        }
+
+        button:hover {
+            background: linear-gradient(180deg, #005522, #003311);
+            box-shadow: 0 2px 0 #001105, 0 0 15px rgba(0, 255, 102, 0.4);
+            transform: translateY(2px);
+        }
+
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #001105;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .stat-box {
+            background: rgba(0, 10, 5, 0.6);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #00aa44;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 22px;
+            margin-top: 8px;
+            font-weight: bold;
+        }
+
+        .chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        .chip-list::-webkit-scrollbar { width: 6px; }
+        .chip-list::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+        .chip-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .chip-badge {
+            background: var(--chip-bg);
+            border: 1px solid #333;
+            color: var(--chip-text);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .chip-badge:hover {
+            border-color: #555;
+            background: #222;
+        }
+        
+        .chip-badge.selected {
+            border-color: var(--pcb-trace);
+            color: #fff;
+            background: #002211;
+            box-shadow: 0 0 10px rgba(0,255,102,0.3);
+        }
+        
+        .chip-badge.selected::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--pcb-trace);
+        }
+
+        .good { color: #00ff66; text-shadow: 0 0 8px rgba(0,255,102,0.5); }
+        .bad { color: #ff3333; text-shadow: 0 0 8px rgba(255,51,51,0.5); }
+        
+        .loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 28px;
+            color: #fff;
+            text-shadow: var(--glow);
+            display: none;
+            background: rgba(0,0,0,0.8);
+            padding: 20px 40px;
+            border: 2px solid var(--pcb-trace);
+            border-radius: 8px;
+            z-index: 50;
+        }
+        
+        .coordinates {
+            display: flex;
+            gap: 15px;
+        }
+
+        #tooltip {
+            position: absolute;
+            background: rgba(0, 15, 5, 0.95);
+            border: 1px solid var(--pcb-trace);
+            padding: 8px 12px;
+            font-family: 'Share Tech Mono', monospace;
+            color: #fff;
+            pointer-events: none;
+            display: none;
+            z-index: 100;
+            border-radius: 4px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            font-size: 14px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'Share Tech Mono', monospace;
+        }
+        
+        .status-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: #00ff66;
+            box-shadow: 0 0 10px #00ff66;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.5; box-shadow: 0 0 5px #00ff66; }
+            50% { opacity: 1; box-shadow: 0 0 15px #00ff66, 0 0 30px #00ff66; }
+            100% { opacity: 0.5; box-shadow: 0 0 5px #00ff66; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>[PCB_DESIGN_SYS v2.0]</h1>
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span id="statusIndicator">SYSTEM ONLINE // AWAITING COMMAND</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="panel">
+                <h2>Initialization</h2>
+                <select id="taskSelect">
+                    <option value="hard_standard_long_horizon">Loading tasks...</option>
+                </select>
+                <button id="btnReset" onclick="resetEnvironment()">Initialize Board</button>
+            </div>
+
+            <div class="panel">
+                <h2>Telemetry</h2>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Reward</div>
+                        <div class="stat-value" id="valReward">0.000</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Step</div>
+                        <div class="stat-value" id="valStep">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Phase</div>
+                        <div class="stat-value" id="valPhase">WAIT</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">HPWL</div>
+                        <div class="stat-value" id="valHpwl">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Component Placement</h2>
+                <div class="coordinates">
+                    <input type="number" id="inputX" placeholder="COORD X" min="0">
+                    <input type="number" id="inputY" placeholder="COORD Y" min="0">
+                </div>
+                <button id="btnPlace" onclick="placeChip()">Mount Component</button>
+                <div class="stat-label" style="margin-top:15px; border-bottom:1px solid #003311; padding-bottom:5px;">Component Queue</div>
+                <div class="chip-list" id="chipQueue">
+                    <div class="chip-badge selected" data-index="0">0 — RESET</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="board-container" id="boardWrapper">
+            <div class="loading" id="loader">PROCESSING SIGNAL...</div>
+            <canvas id="pcbCanvas" width="800" height="800"></canvas>
+            <div id="tooltip"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentState = null;
+        let selectedBlockIndex = 0;
+        const canvas = document.getElementById('pcbCanvas');
+        const ctx = canvas.getContext('2d');
+        const loader = document.getElementById('loader');
+        const tooltip = document.getElementById('tooltip');
+        
+        let cellSize = 20;
+        let padding = 40;
+
+        // Fetch tasks on load
+        async function loadTasks() {
+            try {
+                const res = await fetch('/tasks');
+                if (!res.ok) throw new Error('Tasks not available');
+                const data = await res.json();
+                const select = document.getElementById('taskSelect');
+                select.innerHTML = '';
+                if(data.tasks && data.tasks.length > 0) {
+                    data.tasks.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.id;
+                        opt.textContent = t.id.replace(/_/g, ' ').toUpperCase();
+                        select.appendChild(opt);
+                    });
+                }
+            } catch(e) {
+                console.log("Tasks endpoint failed, using default");
+                document.getElementById('taskSelect').innerHTML = '<option value="hard_standard_long_horizon">HARD STANDARD LONG HORIZON</option>';
+            }
+        }
+
+        loadTasks();
+
+        async function apiCall(endpoint, payload) {
+            loader.style.display = 'block';
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                loader.style.display = 'none';
+                return data;
+            } catch (e) {
+                loader.style.display = 'none';
+                alert('Connection Error: ' + e.message);
+                console.error(e);
+            }
+        }
+
+        async function resetEnvironment() {
+            const task = document.getElementById('taskSelect').value;
+            const data = await apiCall('/reset', { task_name: task });
+            if (data) {
+                updateUI(data);
+                document.getElementById('statusIndicator').textContent = "SYSTEM ONLINE // BOARD INITIALIZED";
+            }
+        }
+
+        async function placeChip() {
+            const x = parseInt(document.getElementById('inputX').value) || 0;
+            const y = parseInt(document.getElementById('inputY').value) || 0;
+            
+            const action = {
+                x: x,
+                y: y,
+                choosen_block_index: selectedBlockIndex
+            };
+            
+            const data = await apiCall('/step', { action: action });
+            if (data) {
+                updateUI(data);
+                if (data.done) {
+                    document.getElementById('statusIndicator').textContent = "SYSTEM HALTED // ROUTING COMPLETE";
+                }
+            }
+        }
+
+        function updateUI(data) {
+            currentState = data;
+            const obs = data.observation || {};
+            
+            // Update stats
+            const reward = data.reward || 0;
+            const rewardEl = document.getElementById('valReward');
+            rewardEl.textContent = reward.toFixed(4);
+            rewardEl.className = 'stat-value ' + (reward >= 0 ? 'good' : 'bad');
+            
+            document.getElementById('valStep').textContent = obs.phase_step || 0;
+            document.getElementById('valPhase').textContent = obs.phase || 'PLACEMENT';
+            
+            let hpwlStr = obs.current_hpwl !== undefined ? obs.current_hpwl.toFixed(2) : '--';
+            if (obs.delta_hpwl !== undefined) {
+                const sign = obs.delta_hpwl >= 0 ? '+' : '';
+                hpwlStr += ` (${sign}${obs.delta_hpwl.toFixed(2)})`;
+            }
+            document.getElementById('valHpwl').textContent = hpwlStr;
+
+            // Update remaining blocks
+            updateChips(obs.remaining_blocks);
+
+            // Draw Board
+            drawBoard(obs.canva_space);
+        }
+
+        function updateChips(blocks) {
+            const container = document.getElementById('chipQueue');
+            container.innerHTML = '';
+            
+            if (!blocks || blocks.length === 0) {
+                container.innerHTML = '<div class="chip-badge selected" data-index="0">0 — RESET</div>';
+                selectedBlockIndex = 0;
+                return;
+            }
+
+            blocks.forEach((b, i) => {
+                const div = document.createElement('div');
+                div.className = 'chip-badge';
+                if (i === selectedBlockIndex) div.classList.add('selected');
+                
+                let text = `${i} — `;
+                if (typeof b === 'object') {
+                    text += `${b.id || '?'} (${b.width}x${b.height})`;
+                } else {
+                    text += 'BLOCK';
+                }
+                div.textContent = text;
+                div.onclick = () => {
+                    document.querySelectorAll('.chip-badge').forEach(el => el.classList.remove('selected'));
+                    div.classList.add('selected');
+                    selectedBlockIndex = i;
+                };
+                container.appendChild(div);
+            });
+            
+            // ensure valid selection
+            if(selectedBlockIndex >= blocks.length) {
+                selectedBlockIndex = 0;
+                if(container.firstChild) container.firstChild.classList.add('selected');
+            }
+        }
+
+        function drawBoard(grid) {
+            if (!grid || !grid.length) {
+                ctx.fillStyle = '#001a0a';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#005522';
+                ctx.font = '24px "Share Tech Mono"';
+                ctx.textAlign = 'center';
+                ctx.fillText("NO SIGNAL // INITIALIZE BOARD", canvas.width/2, canvas.height/2);
+                return;
+            }
+
+            const rows = grid.length;
+            const cols = grid[0].length;
+            
+            // Auto-scale canvas
+            const wrapper = document.getElementById('boardWrapper');
+            const maxW = wrapper.clientWidth - 60;
+            const maxH = wrapper.clientHeight - 60;
+            
+            cellSize = Math.min(Math.floor((maxW - padding*2) / cols), Math.floor((maxH - padding*2) / rows));
+            if (cellSize < 12) cellSize = 12;
+            if (cellSize > 45) cellSize = 45;
+
+            canvas.width = padding * 2 + cols * cellSize;
+            canvas.height = padding * 2 + rows * cellSize;
+
+            // Base PCB color
+            ctx.fillStyle = '#002b12';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw copper grid traces
+            ctx.strokeStyle = 'rgba(0, 255, 102, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x <= cols; x++) {
+                ctx.moveTo(padding + x * cellSize, padding);
+                ctx.lineTo(padding + x * cellSize, padding + rows * cellSize);
+            }
+            for (let y = 0; y <= rows; y++) {
+                ctx.moveTo(padding, padding + y * cellSize);
+                ctx.lineTo(padding + cols * cellSize, padding + y * cellSize);
+            }
+            ctx.stroke();
+
+            // Draw thicker border around the playable area
+            ctx.strokeStyle = '#005522';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(padding-1, padding-1, cols*cellSize+2, rows*cellSize+2);
+
+            // Draw cells
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const val = grid[r][c];
+                    const x = padding + c * cellSize;
+                    // Y axis is inverted in the environment (0 is bottom)
+                    const y = padding + (rows - 1 - r) * cellSize; 
+                    
+                    if (val === 0) {
+                        // Empty pad
+                        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                        ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+                        // small trace point (via)
+                        ctx.fillStyle = 'rgba(0, 255, 102, 0.3)';
+                        ctx.beginPath();
+                        ctx.arc(x + cellSize/2, y + cellSize/2, 1.5, 0, Math.PI*2);
+                        ctx.fill();
+                    } else {
+                        // Placed Component (Microchip IC)
+                        const hue = (Math.abs(val) * 65) % 360; // Spread out colors
+                        
+                        // Chip body (black silicon package)
+                        ctx.fillStyle = '#111';
+                        ctx.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+                        
+                        // Chip brand / identifier patch
+                        ctx.fillStyle = `hsl(${hue}, 80%, 35%)`;
+                        ctx.fillRect(x + 5, y + 5, cellSize - 10, cellSize - 10);
+                        
+                        // Golden/Silver Pins (SMD style)
+                        ctx.fillStyle = '#e6c200';
+                        const pinW = Math.max(1, Math.floor(cellSize/10));
+                        const pinH = Math.max(2, Math.floor(cellSize/8));
+                        
+                        // Top pins
+                        ctx.fillRect(x + 4, y + 1, pinW, pinH);
+                        ctx.fillRect(x + cellSize/2 - pinW/2, y + 1, pinW, pinH);
+                        ctx.fillRect(x + cellSize - 4 - pinW, y + 1, pinW, pinH);
+                        
+                        // Bottom pins
+                        ctx.fillRect(x + 4, y + cellSize - 1 - pinH, pinW, pinH);
+                        ctx.fillRect(x + cellSize/2 - pinW/2, y + cellSize - 1 - pinH, pinW, pinH);
+                        ctx.fillRect(x + cellSize - 4 - pinW, y + cellSize - 1 - pinH, pinW, pinH);
+                        
+                        // Outer glow/border to show it's active
+                        ctx.strokeStyle = `hsl(${hue}, 100%, 60%)`;
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
+                    }
+                }
+            }
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const grid = currentState.observation.canva_space;
+            const rows = grid.length;
+            const cols = grid[0].length;
+            
+            const c = Math.floor((mouseX - padding) / cellSize);
+            const rRaw = Math.floor((mouseY - padding) / cellSize);
+            const r = rows - 1 - rRaw;
+            
+            if (c >= 0 && c < cols && rRaw >= 0 && rRaw < rows) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX + 15) + 'px';
+                tooltip.style.top = (e.clientY + 15) + 'px';
+                tooltip.textContent = `PAD: [X:${c}, Y:${r}] | SIGNAL: ${grid[r][c]}`;
+                
+                // Redraw to show hover effect
+                drawBoard(grid);
+                
+                // Draw hover outline (targeting reticle)
+                const x = padding + c * cellSize;
+                const y = padding + rRaw * cellSize;
+                
+                ctx.strokeStyle = '#00ff66';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                // Top left corner
+                ctx.moveTo(x, y + 5); ctx.lineTo(x, y); ctx.lineTo(x + 5, y);
+                // Top right corner
+                ctx.moveTo(x + cellSize - 5, y); ctx.lineTo(x + cellSize, y); ctx.lineTo(x + cellSize, y + 5);
+                // Bottom right corner
+                ctx.moveTo(x + cellSize, y + cellSize - 5); ctx.lineTo(x + cellSize, y + cellSize); ctx.lineTo(x + cellSize - 5, y + cellSize);
+                // Bottom left corner
+                ctx.moveTo(x + 5, y + cellSize); ctx.lineTo(x, y + cellSize); ctx.lineTo(x, y + cellSize - 5);
+                ctx.stroke();
+                
+            } else {
+                tooltip.style.display = 'none';
+                drawBoard(grid);
+            }
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const grid = currentState.observation.canva_space;
+            const rows = grid.length;
+            const cols = grid[0].length;
+            
+            const c = Math.floor((mouseX - padding) / cellSize);
+            const rRaw = Math.floor((mouseY - padding) / cellSize);
+            const r = rows - 1 - rRaw;
+            
+            if (c >= 0 && c < cols && rRaw >= 0 && rRaw < rows) {
+                document.getElementById('inputX').value = c;
+                document.getElementById('inputY').value = r;
+            }
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+            if (currentState && currentState.observation && currentState.observation.canva_space) {
+                drawBoard(currentState.observation.canva_space);
+            }
+        });
+
+        // Initial draw
+        drawBoard(null);
+
+    </script>
+</body>
+</html>
