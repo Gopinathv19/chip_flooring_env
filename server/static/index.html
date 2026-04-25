@@ -684,129 +684,122 @@
                 return;
             }
 
-            const rows = grid.length;
-            const cols = grid[0].length;
+            // Detect dimensions based on grid data (assuming grid[x][y])
+            const dimX = grid.length;
+            const dimY = grid[0].length;
             
             const wrapper = document.getElementById('boardWrapper');
             const maxW = wrapper.clientWidth - 60;
             const maxH = wrapper.clientHeight - 60;
             
-            cellSize = Math.min(Math.floor((maxW - padding*2) / cols), Math.floor((maxH - padding*2) / rows));
+            cellSize = Math.min(Math.floor((maxW - padding*2) / dimX), Math.floor((maxH - padding*2) / dimY));
             if (cellSize < 10) cellSize = 10;
             if (cellSize > 40) cellSize = 40;
 
-            canvas.width = padding * 2 + cols * cellSize;
-            canvas.height = padding * 2 + rows * cellSize;
+            canvas.width = padding * 2 + dimX * cellSize;
+            canvas.height = padding * 2 + dimY * cellSize;
 
             const bg = drawProceduralBackground(canvas.width, canvas.height);
             ctx.drawImage(bg, 0, 0);
 
-            // Draw placement grid dots
             ctx.fillStyle = 'rgba(0, 255, 102, 0.3)';
-            for (let r = 0; r <= rows; r++) {
-                for (let c = 0; c <= cols; c++) {
-                    ctx.fillRect(padding + c * cellSize - 1, padding + r * cellSize - 1, 2, 2);
+            for (let x = 0; x <= dimX; x++) {
+                for (let y = 0; y <= dimY; y++) {
+                    ctx.fillRect(padding + x * cellSize - 1, padding + y * cellSize - 1, 2, 2);
                 }
             }
 
-            // Board boundary
             ctx.strokeStyle = '#ffd700';
             ctx.lineWidth = 2;
             ctx.setLineDash([10, 5]);
-            ctx.strokeRect(padding, padding, cols*cellSize, rows*cellSize);
+            ctx.strokeRect(padding, padding, dimX*cellSize, dimY*cellSize);
             ctx.setLineDash([]);
 
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < cols; c++) {
-                    const val = grid[r][c];
+            for (let x = 0; x < dimX; x++) {
+                for (let y = 0; y < dimY; y++) {
+                    const val = grid[x][y];
                     if (val !== 0) {
-                        const x = padding + c * cellSize;
-                        const y = padding + (rows - 1 - r) * cellSize; 
+                        const px = padding + x * cellSize;
+                        const py = padding + (dimY - 1 - y) * cellSize; 
                         
                         ctx.fillStyle = '#111';
-                        ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+                        ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
                         
                         ctx.strokeStyle = 'rgba(0, 255, 102, 0.5)';
                         ctx.lineWidth = 1;
-                        ctx.strokeRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+                        ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
 
                         ctx.fillStyle = 'rgba(255,255,255,0.7)';
                         ctx.font = `${Math.floor(cellSize/2)}px "Share Tech Mono"`;
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
-                        ctx.fillText(val, x + cellSize/2, y + cellSize/2);
+                        ctx.fillText(val, px + cellSize/2, py + cellSize/2);
                     }
                 }
             }
         }
 
-        // Precise coordinate translation
         function getGridCoords(e) {
             const rect = canvas.getBoundingClientRect();
-            // Important: Handle border offset (6px) and high-DPI scaling
-            const scaleX = canvas.width / (rect.width - 12); // Subtract 6+6 border
+            const scaleX = canvas.width / (rect.width - 12);
             const scaleY = canvas.height / (rect.height - 12);
             
             const mouseX = (e.clientX - (rect.left + 6)) * scaleX;
             const mouseY = (e.clientY - (rect.top + 6)) * scaleY;
             
             const grid = currentState.observation.canva_space;
-            const rows = grid.length;
-            const cols = grid[0].length;
+            const dimX = grid.length;
+            const dimY = grid[0].length;
             
-            const c = Math.floor((mouseX - padding) / cellSize);
-            const rRaw = Math.floor((mouseY - padding) / cellSize);
-            const r = rows - 1 - rRaw;
+            const gx = Math.floor((mouseX - padding) / cellSize);
+            const gyRaw = Math.floor((mouseY - padding) / cellSize);
+            const gy = dimY - 1 - gyRaw;
             
-            return { c, r, rRaw, mouseX, mouseY, rows, cols };
+            return { gx, gy, gyRaw, dimX, dimY };
         }
 
         canvas.addEventListener('mousemove', (e) => {
             if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
             
-            const { c, r, rRaw, rows, cols } = getGridCoords(e);
+            const { gx, gy, gyRaw, dimX, dimY } = getGridCoords(e);
             
-            if (c >= 0 && c < cols && rRaw >= 0 && rRaw < rows) {
+            if (gx >= 0 && gx < dimX && gyRaw >= 0 && gyRaw < dimY) {
                 tooltip.style.display = 'block';
                 tooltip.style.left = (e.clientX + 15) + 'px';
                 tooltip.style.top = (e.clientY + 15) + 'px';
-                tooltip.textContent = `PAD [X:${c}, Y:${r}] | SIGNAL: ${currentState.observation.canva_space[r][c]}`;
+                tooltip.textContent = `PAD [X:${gx}, Y:${gy}] | SIGNAL: ${currentState.observation.canva_space[gx][gy]}`;
                 
                 drawBoard(currentState.observation.canva_space);
                 
-                // Draw Preview Reticle
-                let pw_count = 1;
-                let ph_count = 1;
+                let pw = 1;
+                let ph = 1;
                 if (currentState.observation.remaining_blocks && currentState.observation.remaining_blocks[selectedBlockIndex]) {
-                    pw_count = currentState.observation.remaining_blocks[selectedBlockIndex].width || 1;
-                    ph_count = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
+                    pw = currentState.observation.remaining_blocks[selectedBlockIndex].width || 1;
+                    ph = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
                 }
                 
-                // In Chip Flooring, (x,y) is usually the bottom-left.
-                // We want to show a preview box where the click cell is the BOTTOM-LEFT.
-                const x = padding + c * cellSize;
-                const top_rRaw = rRaw - ph_count + 1;
-                const y = padding + top_rRaw * cellSize;
+                const px = padding + gx * cellSize;
+                const top_gyRaw = gyRaw - ph + 1;
+                const py = padding + top_gyRaw * cellSize;
                 
-                if (c + pw_count <= cols && top_rRaw >= 0) {
+                if (gx + pw <= dimX && top_gyRaw >= 0) {
                     ctx.fillStyle = 'rgba(0, 255, 102, 0.2)';
                     ctx.strokeStyle = '#00ff66';
                     ctx.lineWidth = 2;
-                    ctx.fillRect(x, y, pw_count * cellSize, ph_count * cellSize);
-                    ctx.strokeRect(x, y, pw_count * cellSize, ph_count * cellSize);
+                    ctx.fillRect(px, py, pw * cellSize, ph * cellSize);
+                    ctx.strokeRect(px, py, pw * cellSize, ph * cellSize);
                     
-                    // Crosshair at the actual anchor (the clicked cell)
-                    const anchorY = padding + rRaw * cellSize;
+                    const anchorPy = padding + gyRaw * cellSize;
                     ctx.beginPath();
                     ctx.strokeStyle = '#ffd700';
-                    ctx.moveTo(x + cellSize/2 - 5, anchorY + cellSize/2);
-                    ctx.lineTo(x + cellSize/2 + 5, anchorY + cellSize/2);
-                    ctx.moveTo(x + cellSize/2, anchorY + cellSize/2 - 5);
-                    ctx.lineTo(x + cellSize/2, anchorY + cellSize/2 + 5);
+                    ctx.moveTo(px + cellSize/2 - 5, anchorPy + cellSize/2);
+                    ctx.lineTo(px + cellSize/2 + 5, anchorPy + cellSize/2);
+                    ctx.moveTo(px + cellSize/2, anchorPy + cellSize/2 - 5);
+                    ctx.lineTo(px + cellSize/2, anchorPy + cellSize/2 + 5);
                     ctx.stroke();
                 } else {
                     ctx.strokeStyle = 'rgba(255, 50, 50, 0.8)';
-                    ctx.strokeRect(padding + c * cellSize, padding + rRaw * cellSize, cellSize, cellSize);
+                    ctx.strokeRect(padding + gx * cellSize, padding + gyRaw * cellSize, cellSize, cellSize);
                 }
             } else {
                 tooltip.style.display = 'none';
@@ -816,11 +809,10 @@
 
         canvas.addEventListener('click', (e) => {
             if (!currentState || !currentState.observation || !currentState.observation.canva_space) return;
-            const { c, r, rows, cols } = getGridCoords(e);
-            
-            if (c >= 0 && c < cols && r >= 0 && r < rows) {
-                document.getElementById('inputX').value = c;
-                document.getElementById('inputY').value = r;
+            const { gx, gy, dimX, dimY } = getGridCoords(e);
+            if (gx >= 0 && gx < dimX && gy >= 0 && gy < dimY) {
+                document.getElementById('inputX').value = gx;
+                document.getElementById('inputY').value = gy;
             }
         });
         
