@@ -16,6 +16,17 @@ tags:
 
 ## ChipMind-LH is a long-horizon, constraint-evolving environment built for the EDA community, enabling chip design agents to learn adaptive planning, iterative refinement, and decision-making under realistic design pressures.
 
+## Live Frontend Demo
+Judges can directly explore the frontend here:
+
+- [ChipMind-LH Frontend (Hugging Face Space)](https://huggingface.co/spaces/GopinathV19/chip_flooring_env)
+
+## Main Frontend Snapshot
+Add your main frontend image below (replace the file path if needed):
+
+![ChipMind-LH Frontend Main View](assests/frontend/main.png)
+
+
 ## [1] Environment Overview
 ChipMind-LH is a long-horizon chip design environment where agents must adapt to hidden constraints, repair suboptimal layouts, and commit irreversible decisions under pressure.
 
@@ -177,3 +188,31 @@ The agent is not rewarded for acting fast, but for:
 That is why the Long-Horizon Planning theme is fundamental to this environment.
 
 ---
+
+## [10] Frontend Walkthrough (Add Remaining Screenshots Here)
+Use this section to document the interface flow with your remaining images.
+
+### 1. Initialization Panel
+Explain how users choose scenario settings and start/reset an episode.
+
+![Initialization Panel](assets/frontend/init-panel.png)
+
+### 2. Placement Workspace
+Explain how component placement happens and what users should watch while placing blocks.
+
+![Placement Workspace](assets/frontend/placement-workspace.png)
+
+### 3. Telemetry and Metrics
+Explain `Reward`, `Step`, `Phase`, and `HPWL`, and how these metrics guide decisions.
+
+![Telemetry Metrics](assets/frontend/telemetry-metrics.png)
+
+### 4. Component Queue and Controls
+Explain how users select components and mount/place them in the workspace.
+
+![Component Queue](assets/frontend/component-queue.png)
+
+### 5. Example End-to-End Flow
+Summarize one short run: initialize -> place -> refine -> finalize.
+
+![End-to-End Example](assets/frontend/end-to-end-flow.png)
