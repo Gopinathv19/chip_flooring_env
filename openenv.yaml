@@ -28,56 +28,83 @@ tags:
   - reinforcement-learning
 
 tasks:
-  - id: easy
+  - id: easy_standard_long_horizon
     difficulty: easy
-    description: Place 5 connected blocks legally on a 12x12 grid while keeping connected blocks close.
+    description: Plan, reveal, and repair a easy standard layout on a 12x12 grid with hidden constraints, delayed reward, and a later repair phase.
     grid_size: 12
     block_count: 5
-    max_steps: 5
+    max_steps: 24
     score_range: [0.01, 0.99]
-    grader: server.graders.grade_easy
+    grader: server.graders.grade_long_horizon
 
-  - id: medium
+  - id: easy_heterogeneous_long_horizon
+    difficulty: easy
+    description: Plan, reveal, and repair a easy heterogeneous layout on a 12x12 grid with hidden constraints, delayed reward, and a later repair phase.
+    grid_size: 12
+    block_count: 5
+    max_steps: 24
+    score_range: [0.01, 0.99]
+    grader: server.graders.grade_long_horizon
+
+  - id: easy_fixed_obstacles_long_horizon
+    difficulty: easy
+    description: Plan, reveal, and repair a easy fixed_obstacles layout on a 12x12 grid with hidden constraints, delayed reward, and a later repair phase.
+    grid_size: 12
+    block_count: 5
+    max_steps: 24
+    score_range: [0.01, 0.99]
+    grader: server.graders.grade_long_horizon
+
+  - id: medium_standard_long_horizon
     difficulty: medium
-    description: Place 10 connected blocks legally on an 18x18 grid while reducing congestion and HPWL.
+    description: Plan, reveal, and repair a medium standard layout on a 18x18 grid with hidden constraints, delayed reward, and a later repair phase.
     grid_size: 18
     block_count: 10
-    max_steps: 10
+    max_steps: 24
     score_range: [0.01, 0.99]
-    grader: server.graders.grade_medium
+    grader: server.graders.grade_long_horizon
 
-  - id: hard
+  - id: medium_heterogeneous_long_horizon
+    difficulty: medium
+    description: Plan, reveal, and repair a medium heterogeneous layout on a 18x18 grid with hidden constraints, delayed reward, and a later repair phase.
+    grid_size: 18
+    block_count: 10
+    max_steps: 24
+    score_range: [0.01, 0.99]
+    grader: server.graders.grade_long_horizon
+
+  - id: medium_fixed_obstacles_long_horizon
+    difficulty: medium
+    description: Plan, reveal, and repair a medium fixed_obstacles layout on a 18x18 grid with hidden constraints, delayed reward, and a later repair phase.
+    grid_size: 18
+    block_count: 10
+    max_steps: 26
+    score_range: [0.01, 0.99]
+    grader: server.graders.grade_long_horizon
+
+  - id: hard_standard_long_horizon
     difficulty: hard
-    description: Place 15 connected blocks legally on a 24x24 grid while minimizing wirelength under tighter clustering pressure.
+    description: Plan, reveal, and repair a hard standard layout on a 24x24 grid with hidden constraints, delayed reward, and a later repair phase.
     grid_size: 24
     block_count: 15
-    max_steps: 15
+    max_steps: 27
     score_range: [0.01, 0.99]
-    grader: server.graders.grade_hard
+    grader: server.graders.grade_long_horizon
 
-  - id: heterogeneous
-    difficulty: heterogeneous
-    description: Place mixed block types on a 24x24 grid while prioritizing higher-power macro blocks and reducing wirelength.
-    grid_size: 24
-    block_count: 12
-    max_steps: 12
-    score_range: [0.01, 0.99]
-    grader: server.graders.grade_heterogeneous
-
-  - id: fixed_obstacles
-    difficulty: fixed_obstacles
-    description: Place 15 movable blocks on a 24x24 grid while avoiding 3 pre-placed fixed obstacles.
+  - id: hard_heterogeneous_long_horizon
+    difficulty: hard
+    description: Plan, reveal, and repair a hard heterogeneous layout on a 24x24 grid with hidden constraints, delayed reward, and a later repair phase.
     grid_size: 24
     block_count: 15
-    max_steps: 15
+    max_steps: 29
     score_range: [0.01, 0.99]
-    grader: server.graders.grade_fixed_obstacles
+    grader: server.graders.grade_long_horizon
 
-  - id: long_horizon
-    difficulty: long_horizon
-    description: Plan, reveal, and repair a 24-block layout on a 28x28 grid with hidden constraints and a repair phase.
-    grid_size: 28
-    block_count: 24
-    max_steps: 30
+  - id: hard_fixed_obstacles_long_horizon
+    difficulty: hard
+    description: Plan, reveal, and repair a hard fixed_obstacles layout on a 24x24 grid with hidden constraints, delayed reward, and a later repair phase.
+    grid_size: 24
+    block_count: 15
+    max_steps: 33
     score_range: [0.01, 0.99]
     grader: server.graders.grade_long_horizon
