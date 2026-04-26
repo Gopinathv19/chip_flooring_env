@@ -59,6 +59,7 @@ MAX_STEPS = int(os.getenv("MAX_STEPS") or "100")
 TEMPERATURE = float(os.getenv("TEMPERATURE") or "0.2")
 MAX_TOKENS = int(os.getenv("MAX_TOKENS") or "120")
 MODEL_CONNECTION_RETRY_SLEEP_MS = int(os.getenv("MODEL_CONNECTION_RETRY_SLEEP_MS") or "250")
+MODEL_ACTION_RETRY_LIMIT = int(os.getenv("MODEL_ACTION_RETRY_LIMIT") or "8")
 
 
 def load_module(module_name: str, path: Path):
@@ -379,6 +380,8 @@ def model_suggest_action(
 def normalize_action(
     env: ChipFlooringEnvironment,
     action_data: Optional[Dict[str, Any]],
+    candidate_actions: Optional[List[Dict[str, Any]]] = None,
+    phase: str = "placement",
 ) -> Tuple[Optional[ChipFlooringAction], Optional[Dict[str, Any]],Optional[str]]:
     
     if not action_data:
@@ -391,14 +394,91 @@ def normalize_action(
 
     if not isinstance(block_id,str) or not isinstance(x,int) or not isinstance(y,int):
         return None,None,"invalid_action_fields"
+    if action_type not in {"place", "move", "commit"}:
+        return None, None, "invalid_action_type"
+    if str(phase).strip().lower() == "placement" and action_type != "place":
+        return None, None, "invalid_action_for_phase"
     
     index=next((i for i, block in enumerate(env.state.blocks) if block.id==block_id),-1)
+    if index < 0:
+        return None, None, "unknown_block_id"
+
+    if candidate_actions:
+        candidate_set = {
+            (
+                str(item.get("block_id")),
+                int(item.get("x")),
+                int(item.get("y")),
+                str(item.get("action_type", "place") or "place").strip().lower(),
+            )
+            for item in candidate_actions
+            if isinstance(item, dict)
+            and item.get("block_id") is not None
+            and item.get("x") is not None
+            and item.get("y") is not None
+        }
+        if (block_id, x, y, action_type) not in candidate_set:
+            return None, None, "action_not_in_candidates"
 
     return(
         ChipFlooringAction(x=x,y=y,choosen_block_index=index, action_type=action_type),
         {"block_id":block_id,"x":x,"y":y,"action_type":action_type},
         None,
     )
+
+
+def action_signature(action_data: Dict[str, Any]) -> Optional[Tuple[str, int, int, str]]:
+    try:
+        return (
+            str(action_data["block_id"]),
+            int(action_data["x"]),
+            int(action_data["y"]),
+            str(action_data.get("action_type", "place") or "place").strip().lower(),
+        )
+    except Exception:
+        return None
+
+
+def filter_candidates(
+    candidate_actions: List[Dict[str, Any]],
+    blocked: set[Tuple[str, int, int, str]],
+) -> List[Dict[str, Any]]:
+    filtered: List[Dict[str, Any]] = []
+    for candidate in candidate_actions:
+        signature = action_signature(candidate) if isinstance(candidate, dict) else None
+        if signature is None or signature not in blocked:
+            filtered.append(candidate)
+    return filtered
+
+
+def fallback_action_from_candidates(
+    env: ChipFlooringEnvironment,
+    candidate_actions: List[Dict[str, Any]],
+    phase: str,
+) -> Tuple[Optional[ChipFlooringAction], Optional[Dict[str, Any]]]:
+    if not candidate_actions:
+        return None, None
+
+    sorted_candidates = sorted(
+        [candidate for candidate in candidate_actions if isinstance(candidate, dict)],
+        key=lambda item: (
+            0 if str(item.get("action_type", "place")).lower() == "place" else 1,
+            -int(item.get("area", 0) or 0),
+            str(item.get("block_id", "")),
+            int(item.get("x", 0) or 0),
+            int(item.get("y", 0) or 0),
+        ),
+    )
+    for candidate in sorted_candidates:
+        action, action_repr, _ = normalize_action(
+            env,
+            candidate,
+            candidate_actions=candidate_actions,
+            phase=phase,
+        )
+        if action is not None and action_repr is not None:
+            return action, action_repr
+    return None, None
 
 
 def action_to_string(action_repr: Optional[Dict[str, Any]]) -> str:
@@ -437,6 +517,9 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
     consecutive_invalids = 0
     previous_failure = ""
     recent_history: List[Dict[str, Any]] = []
+    blocked_action_signatures: set[Tuple[str, int, int, str]] = set()
+    repeated_invalid_action_count = 0
+    last_invalid_action_signature: Optional[Tuple[str, int, int, str]] = None
 
     log_start(
         task=task_name,
@@ -469,6 +552,11 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                     phase=phase,
                     per_block_limit=1,
                 )
+            candidate_actions = [item for item in candidate_actions if isinstance(item, dict)]
+            filtered_candidates = filter_candidates(candidate_actions, blocked_action_signatures)
+            if not filtered_candidates and candidate_actions:
+                blocked_action_signatures.clear()
+                filtered_candidates = list(candidate_actions)
 
             action: Optional[ChipFlooringAction] = None
             action_repr: Optional[Dict[str, Any]] = None
@@ -476,7 +564,7 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
             attempt = 0
             model_retry_penalty = 0.0
 
-            while action is None:
+            while action is None and attempt < MODEL_ACTION_RETRY_LIMIT:
                 attempt += 1
                 suggested, _, request_error, had_transport_error = model_suggest_action(
                     client,
@@ -491,19 +579,32 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                     density_map,
                     total_reward,
                     recent_history,
-                    candidate_actions,
+                    filtered_candidates,
                     previous_failure=previous_failure,
                 )
 
                 if had_transport_error:
+                    previous_failure = request_error or "connection_error"
                     sleep(max(0.0, MODEL_CONNECTION_RETRY_SLEEP_MS / 1000.0))
                     continue
 
-                action, action_repr, parse_error = normalize_action(env, suggested)
+                action, action_repr, parse_error = normalize_action(
+                    env,
+                    suggested,
+                    candidate_actions=filtered_candidates,
+                    phase=phase,
+                )
 
                 if action is None:
                     previous_failure = parse_error or "invalid model output"
                     model_retry_penalty += float(env.get_model_output_penalty(parse_error))
+                    invalid_signature = action_signature(suggested) if isinstance(suggested, dict) else None
+                    if invalid_signature is not None:
+                        blocked_action_signatures.add(invalid_signature)
+                        filtered_candidates = filter_candidates(candidate_actions, blocked_action_signatures)
+                        if not filtered_candidates and candidate_actions:
+                            blocked_action_signatures.clear()
+                            filtered_candidates = list(candidate_actions)
                     if attempt == 1 or attempt % 3 == 0:
                         print(
                             f"Retrying model response for step={step}, attempt={attempt}, "
@@ -512,7 +613,15 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
                         )
 
             if action is None or action_repr is None:
-                raise RuntimeError(f"Unable to obtain valid model action at step {step}")
+                action, action_repr = fallback_action_from_candidates(
+                    env,
+                    filtered_candidates,
+                    phase=str(phase),
+                )
+                if action is None or action_repr is None:
+                    raise RuntimeError(f"Unable to obtain valid model action at step {step}")
+                parse_error = "fallback_policy"
+                previous_failure = parse_error
 
             result = env.step(action)
             obs = result
@@ -546,11 +655,26 @@ def run_task(task_name: str, client: Optional[OpenAI]) -> float:
 
             if invalid_reason:
                 consecutive_invalids += 1
-                previous_failure = invalid_reason
+                invalid_signature = action_signature(action_repr)
+                if invalid_signature is not None:
+                    blocked_action_signatures.add(invalid_signature)
+                    if invalid_signature == last_invalid_action_signature:
+                        repeated_invalid_action_count += 1
+                    else:
+                        repeated_invalid_action_count = 1
+                    last_invalid_action_signature = invalid_signature
+                previous_failure = (
+                    f"{invalid_reason}; avoid={action_to_string(action_repr)}"
+                    if repeated_invalid_action_count >= 2
+                    else str(invalid_reason)
+                )
                 continue
 
             consecutive_invalids = 0
             previous_failure = ""
+            repeated_invalid_action_count = 0
+            last_invalid_action_signature = None
+            blocked_action_signatures.clear()
 
             if done and not env.state.remaining_blocks:
                 success = True

@@ -29,6 +29,7 @@ Usage:
 """
 
 import os
+from typing import Any
 
 try:
     from openenv.core.env_server.http_server import create_fastapi_app
@@ -45,10 +46,10 @@ except ImportError:
     from models import ChipFlooringAction, ChipFlooringObservation
     from server.chip_flooring_env_environment import ChipFlooringEnvironment
     from server.graders import GRADERS
-from fastapi import Body
+from fastapi import Body, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-import pathlib
 
 
 # Create the standard API app
@@ -151,6 +152,100 @@ def _task_summary() -> list[dict[str, object]]:
 @app.get("/tasks")
 def list_tasks():
     return {"tasks": _task_summary()}
+
+
+_ui_env: ChipFlooringEnvironment | None = None
+
+
+def _dump_model(model: Any) -> dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    if hasattr(model, "dict"):
+        return model.dict()
+    return dict(model)
+
+
+def _create_ui_env(task_name: str | None = None) -> ChipFlooringEnvironment:
+    previous_task_name = os.environ.get("TASK_NAME")
+    if task_name:
+        os.environ["TASK_NAME"] = str(task_name).strip().lower().replace("-", "_")
+    try:
+        return ChipFlooringEnvironment()
+    finally:
+        if previous_task_name is None:
+            os.environ.pop("TASK_NAME", None)
+        else:
+            os.environ["TASK_NAME"] = previous_task_name
+
+
+def _ui_payload(env: ChipFlooringEnvironment, observation: ChipFlooringObservation | None = None) -> dict[str, Any]:
+    if observation is None:
+        if env.canvas is None:
+            observation = env.reset()
+        else:
+            observation = env._build_observation()
+
+    state = _dump_model(env.state)
+    obs = _dump_model(observation)
+    payload = {
+        "observation": obs,
+        "state": state,
+        "reward": state.get("reward", obs.get("reward", 0.0)),
+        "done": state.get("done", obs.get("done", False)),
+        "step_count": state.get("step_count", 0),
+        "task_name": state.get("task_name", obs.get("task_name", env.task_name)),
+    }
+    return jsonable_encoder(payload)
+
+
+@app.post("/ui/reset")
+def ui_reset(payload: dict | None = Body(default=None)):
+    global _ui_env
+    payload = payload or {}
+    task_name = payload.get("task_name") or os.getenv("TASK_NAME", "hard_standard_long_horizon")
+    _ui_env = _create_ui_env(str(task_name))
+    observation = _ui_env.reset()
+    return _ui_payload(_ui_env, observation)
+
+
+@app.post("/ui/step")
+def ui_step(payload: dict | None = Body(default=None)):
+    global _ui_env
+    payload = payload or {}
+    if _ui_env is None:
+        _ui_env = _create_ui_env(payload.get("task_name"))
+        _ui_env.reset()
+
+    block_id = payload.get("block_id")
+    block_index = payload.get("choosen_block_index")
+    if block_id is not None:
+        block_index = next(
+            (idx for idx, block in enumerate(_ui_env.state.blocks) if str(block.id) == str(block_id)),
+            None,
+        )
+    if block_index is None:
+        raise HTTPException(status_code=400, detail="Missing or unknown component selection")
+
+    try:
+        action = ChipFlooringAction(
+            action_type=str(payload.get("action_type") or "place").strip().lower() or "place",
+            x=int(payload.get("x", 0)),
+            y=int(payload.get("y", 0)),
+            choosen_block_index=int(block_index),
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid action payload") from exc
+
+    observation = _ui_env.step(action)
+    return _ui_payload(_ui_env, observation)
+
+
+@app.get("/ui/state")
+def ui_state():
+    global _ui_env
+    if _ui_env is None:
+        return {"ready": False}
+    return {"ready": True, **_ui_payload(_ui_env)}
 
 
 @app.post("/grader")

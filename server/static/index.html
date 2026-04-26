@@ -353,6 +353,15 @@
             background: #ff3333;
             box-shadow: 0 0 10px #ff3333;
         }
+
+        .message-line {
+            margin-top: 12px;
+            min-height: 18px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 12px;
+            color: #00aa44;
+            overflow-wrap: anywhere;
+        }
         
         @keyframes pulse {
             0% { opacity: 0.5; box-shadow: 0 0 5px #00ff66; }
@@ -378,6 +387,7 @@
                     <option value="hard_standard_long_horizon">Loading tasks...</option>
                 </select>
                 <button id="btnReset" onclick="resetEnvironment()">Initialize Board</button>
+                <div class="message-line" id="statusMessage"></div>
             </div>
 
             <div class="panel">
@@ -426,7 +436,7 @@
     <script>
         let currentState = null;
         let selectedBlockIndex = 0;
-        let socket = null;
+        let selectableBlocks = [];
         
         const canvas = document.getElementById('pcbCanvas');
         const ctx = canvas.getContext('2d');
@@ -438,37 +448,21 @@
         let cellSize = 20;
         let padding = 40;
 
-        function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
-            socket = new WebSocket(wsUrl);
-            
-            socket.onopen = () => {
+        async function connect() {
+            try {
+                await loadTasks();
                 statusDot.className = 'status-dot online';
-                statusIndicator.textContent = 'SYSTEM ONLINE // CONNECTED';
-                loadTasks();
-            };
-            
-            socket.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'observation') {
-                    updateUI(msg.data);
-                } else if (msg.type === 'error') {
-                    alert('Server Error: ' + msg.data.message);
+                statusIndicator.textContent = 'SYSTEM ONLINE // API READY';
+                const stateRes = await fetch('/ui/state');
+                if (stateRes.ok) {
+                    const state = await stateRes.json();
+                    if (state.ready) updateUI(state);
                 }
-            };
-            
-            socket.onclose = () => {
-                statusDot.className = 'status-dot';
-                statusIndicator.textContent = 'SYSTEM OFFLINE // DISCONNECTED';
-                setTimeout(connect, 3000);
-            };
-
-            socket.onerror = (error) => {
+            } catch (error) {
                 statusDot.className = 'status-dot error';
                 statusIndicator.textContent = 'CONNECTION ERROR';
-            };
+                setTimeout(connect, 3000);
+            }
         }
 
         connect();
@@ -493,20 +487,44 @@
             }
         }
 
-        function resetEnvironment() {
-            if (!socket || socket.readyState !== WebSocket.OPEN) return;
-            const task = document.getElementById('taskSelect').value;
-            socket.send(JSON.stringify({
-                type: 'reset',
-                data: { task_name: task }
-            }));
+        async function apiPost(url, payload) {
             loader.style.display = 'block';
-            setTimeout(() => loader.style.display = 'none', 500);
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || 'Environment request failed');
+                }
+                updateUI(data);
+            } catch (error) {
+                statusDot.className = 'status-dot error';
+                statusIndicator.textContent = 'REQUEST ERROR';
+                document.getElementById('statusMessage').textContent = error.message;
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        function resetEnvironment() {
+            const task = document.getElementById('taskSelect').value;
+            selectedBlockIndex = 0;
+            selectableBlocks = [];
+            document.getElementById('inputX').value = '';
+            document.getElementById('inputY').value = '';
+            apiPost('/ui/reset', { task_name: task });
         }
 
         function placeChip() {
-            if (!socket || socket.readyState !== WebSocket.OPEN) return;
             if (!currentState) return;
+            const selectedBlock = selectableBlocks[selectedBlockIndex];
+            if (!selectedBlock) {
+                alert('Please initialize the board and select a component first.');
+                return;
+            }
 
             const x = parseInt(document.getElementById('inputX').value);
             const y = parseInt(document.getElementById('inputY').value);
@@ -515,30 +533,25 @@
                 alert('Please select a placement point on the board first.');
                 return;
             }
-            
-            socket.send(JSON.stringify({
-                type: 'step',
-                data: {
-                    x: x,
-                    y: y,
-                    choosen_block_index: selectedBlockIndex
-                }
-            }));
-            
-            loader.style.display = 'block';
-            setTimeout(() => loader.style.display = 'none', 300);
+
+            apiPost('/ui/step', {
+                action_type: selectedBlock.action_type || actionTypeForPhase(currentState.observation.phase),
+                block_id: selectedBlock.id,
+                x: x,
+                y: y
+            });
         }
 
         function updateUI(data) {
             currentState = data;
             const obs = data.observation || {};
             
-            const reward = data.reward || 0;
+            const reward = Number(data.reward ?? obs.reward ?? 0);
             const rewardEl = document.getElementById('valReward');
             rewardEl.textContent = reward.toFixed(4);
             rewardEl.className = 'stat-value ' + (reward >= 0 ? 'good' : 'bad');
             
-            document.getElementById('valStep').textContent = obs.phase_step || 0;
+            document.getElementById('valStep').textContent = data.step_count ?? 0;
             document.getElementById('valPhase').textContent = (obs.phase || 'PLACEMENT').toUpperCase();
             
             let hpwlStr = obs.current_hpwl !== undefined ? obs.current_hpwl.toFixed(2) : '--';
@@ -548,21 +561,60 @@
             }
             document.getElementById('valHpwl').textContent = hpwlStr;
 
-            updateChips(obs.remaining_blocks);
+            document.getElementById('statusMessage').textContent = obs.invalid_reasons || obs.instruction || '';
+            statusDot.className = 'status-dot online';
+            statusIndicator.textContent = obs.done ? 'EPISODE COMPLETE' : 'SYSTEM ONLINE // API READY';
+
+            updateChips(buildSelectableBlocks(obs));
             drawBoard(obs.canva_space);
+        }
+
+        function actionTypeForPhase(phase) {
+            const normalized = String(phase || '').toLowerCase();
+            return normalized === 'placement' ? 'place' : 'move';
+        }
+
+        function buildSelectableBlocks(obs) {
+            const byId = new Map();
+            const phaseAction = actionTypeForPhase(obs.phase);
+
+            (obs.remaining_blocks || []).forEach(block => {
+                byId.set(String(block.id), { ...block, action_type: 'place' });
+            });
+
+            if (byId.size === 0) {
+                (obs.block_summaries || []).forEach(block => {
+                    byId.set(String(block.id), { ...block, action_type: phaseAction });
+                });
+            }
+
+            (obs.candidate_positions || []).forEach(candidate => {
+                const id = String(candidate.block_id);
+                const existing = byId.get(id) || { id, width: candidate.width, height: candidate.height };
+                byId.set(id, {
+                    ...existing,
+                    width: existing.width || candidate.width,
+                    height: existing.height || candidate.height,
+                    action_type: candidate.action_type || existing.action_type || phaseAction,
+                    candidate
+                });
+            });
+
+            return Array.from(byId.values());
         }
 
         function updateChips(blocks) {
             const container = document.getElementById('chipQueue');
             container.innerHTML = '';
+            selectableBlocks = blocks || [];
             
-            if (!blocks || blocks.length === 0) {
+            if (!selectableBlocks.length) {
                 container.innerHTML = '<div class="chip-info">QUEUE EMPTY</div>';
                 selectedBlockIndex = 0;
                 return;
             }
 
-            blocks.forEach((b, i) => {
+            selectableBlocks.forEach((b, i) => {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'chip-item-wrapper';
                 if (i === selectedBlockIndex) wrapper.classList.add('selected');
@@ -570,6 +622,7 @@
                 const w = b.width || 1;
                 const h = b.height || 1;
                 const name = b.id || '?';
+                const mode = (b.action_type || 'place').toUpperCase();
                 
                 const visual = document.createElement('div');
                 visual.className = 'chip-visual';
@@ -585,7 +638,7 @@
                 
                 const info = document.createElement('div');
                 info.className = 'chip-info';
-                info.innerHTML = `[${i}] ${name}<br>(${w}x${h})`;
+                info.innerHTML = `[${i}] ${name}<br>${mode}<br>(${w}x${h})`;
                 
                 wrapper.appendChild(visual);
                 wrapper.appendChild(info);
@@ -598,7 +651,7 @@
                 container.appendChild(wrapper);
             });
             
-            if(selectedBlockIndex >= blocks.length) {
+            if(selectedBlockIndex >= selectableBlocks.length) {
                 selectedBlockIndex = 0;
                 if(container.firstChild) container.firstChild.classList.add('selected');
             }
@@ -773,9 +826,9 @@
                 
                 let pw = 1;
                 let ph = 1;
-                if (currentState.observation.remaining_blocks && currentState.observation.remaining_blocks[selectedBlockIndex]) {
-                    pw = currentState.observation.remaining_blocks[selectedBlockIndex].width || 1;
-                    ph = currentState.observation.remaining_blocks[selectedBlockIndex].height || 1;
+                if (selectableBlocks[selectedBlockIndex]) {
+                    pw = selectableBlocks[selectedBlockIndex].width || 1;
+                    ph = selectableBlocks[selectedBlockIndex].height || 1;
                 }
                 
                 const px = padding + gx * cellSize;
