@@ -13,6 +13,9 @@ tags:
 
 # ChipMind-LH: A Long-Horizon Environment for Chip Floorplanning
 
+
+## ChipMind-LH is a long-horizon, constraint-evolving environment built for the EDA community, enabling chip design agents to learn adaptive planning, iterative refinement, and decision-making under realistic design pressures.
+
 ## [1] Environment Overview
 ChipMind-LH is a long-horizon chip design environment where agents must adapt to hidden constraints, repair suboptimal layouts, and commit irreversible decisions under pressure.
 
@@ -133,7 +136,37 @@ Note: This makes it a strong benchmark for real decision-making capability.
 
 ---
 
-## [8] Key Insight
+## [8] How This Benefits the EDA Community
+ChipMind-LH provides a research-ready environment for developing next-generation AI systems in chip design.
+
+### Key Contributions
+- Moves beyond static benchmarks to dynamic, realistic simulation
+- Enables research on adaptive and self-correcting agents
+- Provides a testbed for long-horizon reinforcement learning in EDA
+- Bridges the gap between academic RL setups and real-world chip workflows
+
+This environment can support:
+- RL-based floorplanning research
+- Adaptive placement strategies
+- Constraint-aware design automation
+- Exploration of human-like iterative design behaviors
+
+### Who Can Benefit From This?
+### 1. AI/ML Researchers
+- Study long-horizon decision making
+- Develop agents that handle delayed feedback and evolving constraints
+
+### 2. EDA Researchers and Engineers
+- Prototype intelligent placement and optimization strategies
+- Simulate realistic design workflows
+
+### 3. Semiconductor Industry Practitioners
+- Explore AI-assisted design tools
+- Evaluate adaptive placement approaches
+
+---
+
+## [9] Key Insight
 This is not a placement problem—it is a planning problem disguised as placement.
 
 The agent is not rewarded for acting fast, but for:
