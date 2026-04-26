@@ -3,10 +3,16 @@
 
 ## ChipMind-LH is a long-horizon, constraint-evolving environment built for the EDA community, enabling chip design agents to learn adaptive planning, iterative refinement, and decision-making under realistic design pressures.
 
-## Live Frontend Demo
-Judges can directly explore the frontend here:
+## Explanation Video
+Judges can view the video here:
 
-- [ChipMind-LH Frontend (Hugging Face Space)](https://huggingface.co/spaces/GopinathV19/chip_flooring_env)
+- [ChipMind-LH Explanation video (YouTube video)](https://youtu.be/ikKkUcdjPrg)
+
+
+## HuggingFace Space
+Judges can directly explore the environment here:
+
+- [ChipMind-LH HuggingFace Space (Hugging Face Space)](https://huggingface.co/spaces/GopinathV19/chip_flooring_env)
 
  
 ![ChipMind-LH ](assests/frontend/main.png)
