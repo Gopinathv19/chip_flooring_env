@@ -14,6 +14,10 @@ Judges can directly explore the environment here:
 
 - [ChipMind-LH HuggingFace Space (Hugging Face Space)](https://huggingface.co/spaces/GopinathV19/chip_flooring_env)
 
+
+- [ChipMind-LH - Training Script (Colab)](https://colab.research.google.com/drive/1M0e1Jf_Rq7YAjDABey6FCCQ12yve2slG?usp=sharing)
+
+
  
 ![ChipMind-LH ](assests/frontend/main.png)
 
