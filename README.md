@@ -191,20 +191,99 @@ That is why the Long-Horizon Planning theme is fundamental to this environment.
 Use this section to document the interface flow with your remaining images.
 
 ### 1. Initialization Panel
- 
+The Initialization panel is the starting point of each episode.  
+Select the required environment mode (difficulty + constraint style), then click **Initialize/Start** to load a new floorplanning task.
+
+What to check before starting:
+- Confirm you selected the intended long-horizon variant
+- Reset the environment if stale placements from a previous run are visible
+- Verify the phase indicator is at the initial phase before placing components
+
 ![Initialization Panel](assests/frontend/tasks.png)
 
  
 
 ### 2. Telemetry and Metrics
- 
+The Telemetry section provides real-time feedback while you place components and progress through phases.
+
+How to read the metrics:
+- **Reward**: immediate feedback for the current action quality
+- **Step**: number of actions taken in the current episode
+- **Phase**: current planning stage (Placement/Repair/Finalize)
+- **HPWL**: routing quality signal; lower values generally indicate better wirelength behavior
+
+Recommended interpretation:
+- Do not optimize only for instant reward
+- Track reward + HPWL trend across steps, not as one-step signals
+- Use phase transitions as decision checkpoints for strategy updates
+
 ![Telemetry Metrics](assests/frontend/componentplacementque.png)
 
 ### 3. Component Queue and Controls
- 
+This panel is where you pick components and execute placement actions on the canvas.
+
+Typical flow:
+- Select the next component from the queue
+- Set/adjust placement coordinates or placement target
+- Mount/place the component into the workspace
+- Repeat while watching Telemetry for quality changes
+
+Best practices:
+- Place high-impact blocks early with enough spacing for later refinement
+- Avoid over-committing to dense placements in early steps
+- Keep flexibility for repair-phase adjustments
+
 ![Component Queue](assests/frontend/componentplacementque.png)
 
 ### 4. Example End-to-End Flow
- 
+This snapshot represents a post-placement layout after multiple actions and refinements.
+
+Suggested run sequence:
+1. Initialize the environment and choose the task variant.
+2. Perform rough placement to establish a feasible structure.
+3. Refine placements when constraints evolve or penalties appear.
+4. Enter final stabilization with minimal movement and better HPWL/reward balance.
+
+Evaluation checklist for a good run:
+- Components are non-overlapping and reasonably organized
+- Reward trend is stable or improving near final steps
+- HPWL remains controlled after refinement stages
 
 ![View of blocks in the canvas](assests/frontend/components-after-arrangement.png)
+
+---
+
+## [11] Frontend Usage Guidelines
+Use these guidelines when interacting with the ChipMind-LH frontend.
+
+### A. Before You Start
+- Select the correct scenario and difficulty for your test objective
+- Start each evaluation from a fresh initialization
+- Decide whether your run is exploratory (learning) or benchmark-oriented (score-focused)
+
+### B. During Placement
+- Begin with a coarse global structure, then improve incrementally
+- Reserve room for future moves because hidden constraints can appear later
+- Use short action bursts, then re-check Telemetry before continuing
+
+### C. During Repair/Refinement
+- Revisit earlier placements instead of forcing greedy local fixes
+- Prioritize resolving constraint violations before micro-optimizing
+- Compare current state against prior checkpoints to avoid regressions
+
+### D. Finalization Stage
+- Shift from exploration to commitment
+- Avoid unnecessary movement if metrics are already stable
+- Finalize when reward and HPWL are both acceptable for the chosen mode
+
+### E. Common Mistakes to Avoid
+- Chasing immediate reward without considering later phases
+- Packing components too tightly in early steps
+- Ignoring phase changes and continuing the same strategy
+
+### F. Practical Judge Demo Flow
+1. Open the Hugging Face Space link.
+2. Initialize one task variant and explain the selected mode.
+3. Show rough placement with live Telemetry updates.
+4. Demonstrate one refinement adjustment and its metric impact.
+5. Conclude with final layout quality and key learning behavior.
