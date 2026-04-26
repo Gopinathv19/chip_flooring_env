@@ -21,10 +21,8 @@ Judges can directly explore the frontend here:
 
 - [ChipMind-LH Frontend (Hugging Face Space)](https://huggingface.co/spaces/GopinathV19/chip_flooring_env)
 
-## Main Frontend Snapshot
-Add your main frontend image below (replace the file path if needed):
-
-![ChipMind-LH Frontend Main View](assests/frontend/main.png)
+ 
+![ChipMind-LH ](assests/frontend/main.png)
 
 
 ## [1] Environment Overview
@@ -189,30 +187,24 @@ That is why the Long-Horizon Planning theme is fundamental to this environment.
 
 ---
 
-## [10] Frontend Walkthrough (Add Remaining Screenshots Here)
+## [10] Frontend Walkthrough 
 Use this section to document the interface flow with your remaining images.
 
 ### 1. Initialization Panel
-Explain how users choose scenario settings and start/reset an episode.
+ 
+![Initialization Panel](assests/frontend/tasks.png)
 
-![Initialization Panel](assets/frontend/init-panel.png)
+ 
 
-### 2. Placement Workspace
-Explain how component placement happens and what users should watch while placing blocks.
+### 2. Telemetry and Metrics
+ 
+![Telemetry Metrics](assests/frontend/componentplacementque.png)
 
-![Placement Workspace](assets/frontend/placement-workspace.png)
+### 3. Component Queue and Controls
+ 
+![Component Queue](assests/frontend/componentplacementque.png)
 
-### 3. Telemetry and Metrics
-Explain `Reward`, `Step`, `Phase`, and `HPWL`, and how these metrics guide decisions.
+### 4. Example End-to-End Flow
+ 
 
-![Telemetry Metrics](assets/frontend/telemetry-metrics.png)
-
-### 4. Component Queue and Controls
-Explain how users select components and mount/place them in the workspace.
-
-![Component Queue](assets/frontend/component-queue.png)
-
-### 5. Example End-to-End Flow
-Summarize one short run: initialize -> place -> refine -> finalize.
-
-![End-to-End Example](assets/frontend/end-to-end-flow.png)
+![View of blocks in the canvas](assests/frontend/components-after-arrangement.png)
