@@ -14,6 +14,8 @@ Judges can directly explore the environment here:
 
 - [ChipMind-LH HuggingFace Space (Hugging Face Space)](https://huggingface.co/spaces/GopinathV19/chip_flooring_env)
 
+## Colab Training Script
+Judges can directly explore the environment here:
 
 - [ChipMind-LH - Training Script (Colab)](https://colab.research.google.com/drive/1M0e1Jf_Rq7YAjDABey6FCCQ12yve2slG?usp=sharing)
 
@@ -22,169 +24,221 @@ Judges can directly explore the environment here:
 ![ChipMind-LH ](assests/frontend/main.png)
 
 
-## [1] Environment Overview
-ChipMind-LH is a long-horizon chip design environment where agents must adapt to hidden constraints, repair suboptimal layouts, and commit irreversible decisions under pressure.
+## [1] Environment Overview — A Learning System, Not Just an Environment
 
-It is designed to simulate the real workflow of chip floorplanning, where:
-- Early decisions impact future feasibility
-- Constraints are not fully visible initially
-- Iterative refinement is necessary
-- Final decisions must be made with confidence
+ChipMind-LH is not a traditional placement simulator.
 
-In this environment, agents are not just placing blocks - they are learning to plan, adapt, and optimize over time.
+It is a **behavior-shaping environment** designed to train agents to:
+- Think over long horizons  
+- Re-evaluate past decisions  
+- Repair mistakes  
+- Commit under pressure  
 
----
+Instead of optimizing placement in a single step, the agent is taken through a **structured learning journey**, where each phase changes how rewards behave and how decisions are evaluated.
 
-## [2] Workflow of the Environment
-The workflow is designed to push agents toward realistic chip floorplanning behavior:
-
-**Rough Placement -> Iterative Refinement -> Final Stabilization**
-
-Instead of solving the problem in one step, the agent must:
-- Build an initial layout
-- Adapt when new constraints appear
-- Repair earlier mistakes
-- Converge to a stable and optimized solution
-
-This transforms the task into a continuous decision-making process, not a one-shot optimization.
+The goal is not just to place blocks —  
+but to **teach the agent how to think, adapt, and converge**.
 
 ---
 
-## [3] Why Long-Horizon Planning is the Core of This Environment
-This environment is built around the **Long-Horizon Planning & Instruction Following** theme.
+## [2] The Core Problem
 
-Unlike short-horizon tasks where each action has immediate payoff, chip floorplanning is:
-- Sequential
-- Interdependent
-- Delayed in feedback
+Chip floorplanning is not a one-step optimization problem.
 
-Early decisions directly constrain or enable future possibilities, making the problem unsuitable for greedy strategies.
+It is:
+- Sequential  
+- Interdependent  
+- Delayed in feedback  
 
----
+Early placements affect future feasibility, and mistakes are often realized too late.
 
-## [4] How Long-Horizon Structure is Embedded
+Traditional environments fail because:
+- They reward only final outcomes  
+- They do not guide correction  
+- They allow greedy short-term strategies  
 
-### 1. Multi-Phase Execution (Temporal Decomposition)
-The task is divided into three phases:
-- **Placement Phase** -> Build initial layout with partial information
-- **Repair Phase** -> Hidden constraints are revealed
-- **Finalize Phase** -> Lock decisions and stabilize layout
-
-This forces the agent to:
-- Make provisional decisions early
-- Revisit and revise those decisions later
-- Transition from exploration -> correction -> commitment
-
-Note: A single-pass strategy will fail in this environment.
+ChipMind-LH solves this by introducing:
+> **A long-horizon correction loop with evolving rewards**
 
 ---
 
-### 2. Delayed and Evolving Feedback
-The reward structure is intentionally non-myopic:
-- Early placements may appear optimal but become suboptimal later
-- Wirelength (HPWL) optimization emerges only after multiple placements
-- Hidden constraints introduce non-stationarity mid-episode
+## [3] Learning Through Phases
 
-Note: The agent must anticipate future consequences, not just optimize immediate reward.
+The environment is divided into phases where **reward behavior and constraints evolve over time**.
 
----
+### Flow:
+**Placement → Constraint Reveal → Repair → Finalization**
 
-### 3. Action Irreversibility and Commitment
-In later stages:
-- The agent must commit to placements
-- Movement becomes restricted
-- Mistakes become increasingly costly
-
-Note: This creates decision pressure, forcing the agent to learn:
-- When to continue exploring
-- When to stabilize decisions
+Each transition is not just structural —  
+it changes how the agent experiences reward.
 
 ---
 
-## [5] Why Long-Horizon Planning is Essential
-This environment inherently requires:
-- Tracking state across many steps
-- Revising earlier decisions
-- Handling delayed rewards
-- Planning under evolving constraints
+## [4] Phase 1 — Shock (Breaking False Confidence)
 
-These are defining characteristics of long-horizon reasoning problems.
+During early placement, the agent builds an initial layout with **partial information**.
 
----
+At a specific step, hidden constraints are revealed.
 
-## [6] How This Improves Agent Learning
+This triggers a **shock signal**:
 
-### 1. Temporal Credit Assignment
-Understanding how early actions influence future outcomes
+- One-time negative reward spike  
+- Scaled with current HPWL  
+- Directly penalizes the current layout  
 
-### 2. Iterative Refinement
-Learning to:
-Build -> Evaluate -> Adjust -> Converge
+This is implemented in the environment as:
+- A penalty applied immediately after constraint reveal  
+- Based on total wirelength cost  
 
-### 3. Robust Planning Under Uncertainty
-Adapting to hidden constraints and recovering from mistakes
-
-### 4. Strategic Commitment
-Learning when to stop exploring and finalize decisions
+> The agent learns:  
+> *“What looked correct may actually be wrong.”*
 
 ---
 
-## [7] Key Characteristics of the Environment
+## [5] Phase 2 — Regret (Owning Past Decisions)
 
-| Standard Environments | ChipMind-LH |
-|----------------------|------------|
-| Short-horizon        | Long-horizon |
-| Fully observable     | Partially observable |
-| Immediate rewards    | Delayed rewards |
-| One-shot optimization| Iterative refinement |
+After shock, the agent must not just react —  
+it must **feel the cost of its earlier mistakes**.
 
-Note: This makes it a strong benchmark for real decision-making capability.
+This is enforced through reward shaping:
 
----
+- Long-distance connections → higher penalty  
+- Critical edges → amplified weight after reveal  
+- HPWL impact becomes stronger  
 
-## [8] How This Benefits the EDA Community
-ChipMind-LH provides a research-ready environment for developing next-generation AI systems in chip design.
+From the environment logic:
+- Edge importance increases after constraint reveal  
+- Distance penalties scale more aggressively  
+- Earlier bad placements now cost more  
 
-### Key Contributions
-- Moves beyond static benchmarks to dynamic, realistic simulation
-- Enables research on adaptive and self-correcting agents
-- Provides a testbed for long-horizon reinforcement learning in EDA
-- Bridges the gap between academic RL setups and real-world chip workflows
-
-This environment can support:
-- RL-based floorplanning research
-- Adaptive placement strategies
-- Constraint-aware design automation
-- Exploration of human-like iterative design behaviors
-
-### Who Can Benefit From This?
-### 1. AI/ML Researchers
-- Study long-horizon decision making
-- Develop agents that handle delayed feedback and evolving constraints
-
-### 2. EDA Researchers and Engineers
-- Prototype intelligent placement and optimization strategies
-- Simulate realistic design workflows
-
-### 3. Semiconductor Industry Practitioners
-- Explore AI-assisted design tools
-- Evaluate adaptive placement approaches
+> The agent learns:  
+> *“My past decisions are now expensive.”*
 
 ---
 
-## [9] Key Insight
-This is not a placement problem—it is a planning problem disguised as placement.
+## [6] Phase 3 — Adaptation (Learning to Repair)
 
-The agent is not rewarded for acting fast, but for:
-- Thinking ahead
-- Adapting to change
-- Converging to a stable solution
+Now the agent is allowed to move and fix placements.
 
-That is why the Long-Horizon Planning theme is fundamental to this environment.
+But movement alone is not enough — it must be **meaningful**.
+
+Reward shaping during repair:
+
+- If HPWL decreases → reward  
+- If HPWL increases → penalty  
+- Ignoring bad placements → additional penalty  
+- Repeated moves → oscillation penalty  
+
+From the environment:
+- `incremental_hpwl` directly influences reward  
+- Positive adaptation bonus when wirelength improves  
+- Movement cost increases with unnecessary actions  
+
+> The agent learns:  
+> *“I can improve the layout — but only through smart changes.”*
 
 ---
 
-## [10] Frontend Walkthrough 
+## [7] Phase 4 — Pressure (Forcing Convergence)
+
+As the episode progresses, exploration becomes costly.
+
+The environment introduces pressure:
+
+- Movement penalties increase significantly  
+- Oscillation is penalized  
+- Rewards favor stability over exploration  
+- Fewer benefits for trying new placements  
+
+From the environment:
+- Move penalties scale up in finalize phase  
+- Repeated repositioning is discouraged  
+- Reward scaling reduces exploration benefit  
+
+> The agent learns:  
+> *“Stop exploring. Start converging.”*
+
+---
+
+## [8] Phase 5 — Irreversibility (Commitment Matters)
+
+In the final stage, the agent must commit.
+
+- Blocks can be **committed (locked)**  
+- Any attempt to modify committed blocks is penalized  
+- Uncommitted blocks reduce final reward  
+
+From the environment:
+- `commit` action fixes blocks permanently  
+- Changing committed blocks → strong penalty  
+- Final reward depends on stable configuration  
+
+> The agent learns:  
+> *“Decisions are now permanent.”*
+
+---
+
+## [9] Reward System — Structured, Phase-Aware Learning
+
+This environment does not rely on a single reward signal.
+
+Instead, it uses **phase-dependent reward shaping**.
+
+### Core Signals
+
+- 📉 HPWL reduction → positive reward  
+- 📈 HPWL increase → penalty  
+- ⚡ Constraint reveal → shock penalty  
+- 🔁 Repair improvements → adaptation reward  
+- 🔄 Repeated moves → oscillation penalty  
+- ⏳ Late movements → pressure penalty  
+- 🔒 Commit actions → stabilization reward  
+- ❌ Changing committed blocks → strong penalty  
+
+Additionally:
+- Rewards are normalized to **[-0.99, 0.99]** for stable learning  
+- Final completion reward depends on:
+  - Layout quality  
+  - Commitment completeness  
+
+---
+
+## [10] Why This Environment Works
+
+ChipMind-LH is effective because it enforces:
+
+### 1. Long-Horizon Reasoning
+Decisions are evaluated across time, not instantly.
+
+### 2. Temporal Credit Assignment
+Early mistakes affect future rewards.
+
+### 3. Iterative Repair Behavior
+The agent must fix, not just build.
+
+### 4. Controlled Exploration → Convergence
+The agent learns when to:
+- Explore  
+- Adapt  
+- Commit  
+
+### 5. Realistic Design Pressure
+Late-stage decisions are constrained and irreversible.
+
+---
+
+## Final Insight
+
+This is not just a placement environment.
+
+> It is a system where the agent:
+> **gets shocked, feels regret, adapts, faces pressure, and finally commits.**
+
+That is what makes it a true **long-horizon learning environment**.
+
+
+
+## [11] Frontend Walkthrough 
 Use this section to document the interface flow with your remaining images.
 
 ### 1. Initialization Panel
