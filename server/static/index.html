@@ -726,6 +726,84 @@
             return bgCanvas;
         }
 
+        function drawRoundedRect(targetCtx, x, y, width, height, radius) {
+            const r = Math.min(radius, width / 2, height / 2);
+            targetCtx.beginPath();
+            targetCtx.moveTo(x + r, y);
+            targetCtx.lineTo(x + width - r, y);
+            targetCtx.quadraticCurveTo(x + width, y, x + width, y + r);
+            targetCtx.lineTo(x + width, y + height - r);
+            targetCtx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+            targetCtx.lineTo(x + r, y + height);
+            targetCtx.quadraticCurveTo(x, y + height, x, y + height - r);
+            targetCtx.lineTo(x, y + r);
+            targetCtx.quadraticCurveTo(x, y, x + r, y);
+            targetCtx.closePath();
+        }
+
+        function drawChipBody(targetCtx, x, y, width, height, label, options = {}) {
+            const alpha = options.alpha ?? 1;
+            const active = Boolean(options.active);
+            const fixed = Boolean(options.fixed);
+            const committed = Boolean(options.committed);
+            const bodyInset = Math.max(2, Math.min(6, cellSize * 0.12));
+            const pinDepth = Math.max(3, Math.min(8, cellSize * 0.22));
+            const pinWidth = Math.max(2, Math.min(5, cellSize * 0.16));
+            const pinGap = Math.max(3, Math.min(8, cellSize * 0.25));
+            const bodyX = x + bodyInset;
+            const bodyY = y + bodyInset;
+            const bodyW = Math.max(6, width - (bodyInset * 2));
+            const bodyH = Math.max(6, height - (bodyInset * 2));
+            const outline = active ? '#00ff66' : fixed ? '#ffcc00' : committed ? '#66ff99' : '#00aa44';
+
+            targetCtx.save();
+            targetCtx.globalAlpha = alpha;
+            targetCtx.shadowColor = active ? 'rgba(0, 255, 102, 0.55)' : 'rgba(0, 0, 0, 0.45)';
+            targetCtx.shadowBlur = active ? 14 : 6;
+
+            targetCtx.fillStyle = 'rgba(180, 180, 180, 0.85)';
+            for (let px = bodyX + pinGap; px < bodyX + bodyW - pinGap; px += pinGap) {
+                targetCtx.fillRect(px, bodyY - pinDepth, pinWidth, pinDepth + 1);
+                targetCtx.fillRect(px, bodyY + bodyH - 1, pinWidth, pinDepth + 1);
+            }
+            for (let py = bodyY + pinGap; py < bodyY + bodyH - pinGap; py += pinGap) {
+                targetCtx.fillRect(bodyX - pinDepth, py, pinDepth + 1, pinWidth);
+                targetCtx.fillRect(bodyX + bodyW - 1, py, pinDepth + 1, pinWidth);
+            }
+
+            const gradient = targetCtx.createLinearGradient(bodyX, bodyY, bodyX + bodyW, bodyY + bodyH);
+            gradient.addColorStop(0, active ? '#263b31' : '#202020');
+            gradient.addColorStop(0.55, '#101010');
+            gradient.addColorStop(1, '#050505');
+            drawRoundedRect(targetCtx, bodyX, bodyY, bodyW, bodyH, Math.min(4, cellSize * 0.18));
+            targetCtx.fillStyle = gradient;
+            targetCtx.fill();
+            targetCtx.lineWidth = active ? 2 : 1;
+            targetCtx.strokeStyle = outline;
+            targetCtx.stroke();
+
+            targetCtx.shadowBlur = 0;
+            targetCtx.fillStyle = active ? '#00ff66' : '#cfcfcf';
+            targetCtx.font = `${Math.max(9, Math.min(18, Math.floor(Math.min(bodyW, bodyH) * 0.42)))}px "Share Tech Mono"`;
+            targetCtx.textAlign = 'center';
+            targetCtx.textBaseline = 'middle';
+            targetCtx.fillText(String(label || '?'), bodyX + bodyW / 2, bodyY + bodyH / 2, Math.max(8, bodyW - 6));
+
+            targetCtx.restore();
+        }
+
+        function drawCellFallback(grid, dimX, dimY, renderedCells) {
+            for (let x = 0; x < dimX; x++) {
+                for (let y = 0; y < dimY; y++) {
+                    const val = grid[x][y];
+                    if (val === 0 || renderedCells.has(`${x}:${y}`)) continue;
+                    const px = padding + x * cellSize;
+                    const py = padding + (dimY - 1 - y) * cellSize;
+                    drawChipBody(ctx, px, py, cellSize, cellSize, val, { alpha: 0.85 });
+                }
+            }
+        }
+
         function drawBoard(grid) {
             if (!grid || !grid.length) {
                 ctx.fillStyle = '#001a0a';
@@ -768,28 +846,39 @@
             ctx.strokeRect(padding, padding, dimX*cellSize, dimY*cellSize);
             ctx.setLineDash([]);
 
-            for (let x = 0; x < dimX; x++) {
-                for (let y = 0; y < dimY; y++) {
-                    const val = grid[x][y];
-                    if (val !== 0) {
-                        const px = padding + x * cellSize;
-                        const py = padding + (dimY - 1 - y) * cellSize; 
-                        
-                        ctx.fillStyle = '#111';
-                        ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
-                        
-                        ctx.strokeStyle = 'rgba(0, 255, 102, 0.5)';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+            const renderedCells = new Set();
+            const placedBlocks = currentState?.observation?.placed_blocks || [];
+            placedBlocks.forEach(block => {
+                if (!block.position) return;
+                const blockX = Number(block.position[0]);
+                const blockY = Number(block.position[1]);
+                const blockW = Number(block.width || 1);
+                const blockH = Number(block.height || 1);
+                if (!Number.isFinite(blockX) || !Number.isFinite(blockY)) return;
 
-                        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-                        ctx.font = `${Math.floor(cellSize/2)}px "Share Tech Mono"`;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'middle';
-                        ctx.fillText(val, px + cellSize/2, py + cellSize/2);
+                for (let dx = 0; dx < blockH; dx++) {
+                    for (let dy = 0; dy < blockW; dy++) {
+                        renderedCells.add(`${blockX + dx}:${blockY + dy}`);
                     }
                 }
-            }
+
+                const px = padding + blockX * cellSize;
+                const py = padding + (dimY - blockY - blockH) * cellSize;
+                drawChipBody(
+                    ctx,
+                    px,
+                    py,
+                    blockW * cellSize,
+                    blockH * cellSize,
+                    block.id,
+                    {
+                        fixed: block.fixed,
+                        committed: block.committed
+                    }
+                );
+            });
+
+            drawCellFallback(grid, dimX, dimY, renderedCells);
         }
 
         function getGridCoords(e) {
@@ -836,11 +925,11 @@
                 const py = padding + top_gyRaw * cellSize;
                 
                 if (gx + pw <= dimX && top_gyRaw >= 0) {
-                    ctx.fillStyle = 'rgba(0, 255, 102, 0.2)';
-                    ctx.strokeStyle = '#00ff66';
-                    ctx.lineWidth = 2;
-                    ctx.fillRect(px, py, pw * cellSize, ph * cellSize);
-                    ctx.strokeRect(px, py, pw * cellSize, ph * cellSize);
+                    const selected = selectableBlocks[selectedBlockIndex] || {};
+                    drawChipBody(ctx, px, py, pw * cellSize, ph * cellSize, selected.id || '+', {
+                        active: true,
+                        alpha: 0.72
+                    });
                     
                     const anchorPy = padding + gyRaw * cellSize;
                     ctx.beginPath();
