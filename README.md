@@ -1,6 +1,6 @@
 ---
 title: Chip Flooring Env
-emoji: "🚀"
+emoji: ""
 sdk: docker
 app_port: 8000
 short_description: OpenEnv chip floorplanning benchmark
